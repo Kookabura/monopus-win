@@ -1,12 +1,12 @@
 ﻿# Host monitoring and sending data to monopus.io
-$config = iex (Get-Content -Raw -Path "${env:ProgramFiles(x86)}\MonOpus\main.cfg")
 
 try {
+    $config = iex (Get-Content -Raw -Path "${env:ProgramFiles(x86)}\MonOpus\main.cfg")
     $settings_obj = (Invoke-WebRequest $config['uri'] -Method Post -UseBasicParsing -Body @{api_key=$config['api_key'];id=$config['id'];mon_action='check/status';class="host"}).content | ConvertFrom-Json
     $services = @{}
     ($settings_obj.data.services).psobject.properties  | % {$services[$_.Name] = $_.Value}
 } catch {
-    Write-Output "Error on getting data from API"
+    Write-Output ("Error on init stage: " + $_)
     exit 1
 }
 
