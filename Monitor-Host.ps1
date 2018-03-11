@@ -5,14 +5,16 @@ try {
     $settings_obj = (Invoke-WebRequest $config['uri'] -Method Post -UseBasicParsing -Body @{api_key=$config['api_key'];id=$config['id'];mon_action='check/status';class="host"}).content | ConvertFrom-Json
     $services = @{}
     ($settings_obj.data.services).psobject.properties  | % {$services[$_.Name] = $_.Value}
+    $work = $true
 } catch {
     Write-Output ("Error on init stage: " + $_)
     exit 1
 }
 
-while ($true) {
+while ($work) {
 
     $timestamp = [int][double]::Parse((Get-Date -UFormat %s))
+    $bad_keys = @()
 
     foreach ($key in $services.Keys) {
 
@@ -29,7 +31,9 @@ while ($true) {
             $response = (Invoke-WebRequest $config['uri'] -Method Post -UseBasicParsing -Body @{api_key=$config['api_key'];id=$services[$key].id;mon_action='check/handle_result';result=$result;state=$lastexitcode}).content | ConvertFrom-Json
             Write-Verbose $response
             
-            if ($response.success) {
+            if (!$response.success -or !$response.data) {
+                $bad_keys += $key
+            } else {
 
                 $services[$key].updatedon = $response.data.updatedon
                 $services[$key].active = $response.data.active
@@ -39,7 +43,19 @@ while ($true) {
     
     }
 
+    if ($bad_keys) {
+        foreach ($k in $bad_keys) {
+            $services.remove($k)
+        }
+    }
+
     Write-Verbose ($services | Out-String)
+
+
+    if (!$services.count) {
+        $work = $false
+    }
+
     sleep -Seconds 60
 
 }
