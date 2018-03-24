@@ -28,16 +28,19 @@ while ($work) {
             $c = if($services[$key].critical) {"-c $($services[$key].critical)"} else {}
             
             $result = iex "& `"$command`" $args $w $c"
-            $response = (Invoke-WebRequest $config['uri'] -Method Post -UseBasicParsing -Body @{api_key=$config['api_key'];id=$services[$key].id;mon_action='check/handle_result';result=$result;state=$lastexitcode}).content | ConvertFrom-Json
+            $r = Invoke-WebRequest $config['uri'] -Method Post -UseBasicParsing -Body @{api_key=$config['api_key'];id=$services[$key].id;mon_action='check/handle_result';result=$result;state=$lastexitcode}
+            $response = $r.content | ConvertFrom-Json
             Write-Verbose $response
             
-            if (!$response.success -or !$response.data) {
-                $bad_keys += $key
-            } else {
+            if ($r.statusCode -eq 200) {
+                if (!$response.success -or !$response.data) {
+                    $bad_keys += $key
+                } else {
 
-                $services[$key].updatedon = $response.data.updatedon
-                $services[$key].active = $response.data.active
-                $services[$key].interval = if ($response.data.interval) {$response.data.interval} Else {1}
+                    $services[$key].updatedon = $response.data.updatedon
+                    $services[$key].active = $response.data.active
+                    $services[$key].interval = if ($response.data.interval) {$response.data.interval} Else {1}
+                }
             }
         }
     
