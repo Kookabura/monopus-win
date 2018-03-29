@@ -3,7 +3,7 @@ Param(
   [Parameter()]
    [int32]$period = 10,
   [Parameter()]
-   [int32]$W = 5,
+   [int32]$W = 0,
   [Parameter()]
    [int32]$C = 10
 )
@@ -16,9 +16,9 @@ $attempts = 0
 
 try {
     $attempts = (Get-EventLog -LogName Security -After (Get-Date).AddMinutes(('-' + $period)) -InstanceId 4625 -EntryType FailureAudit -ErrorAction SilentlyContinue |  Measure-Object -Sum -Property Index).Count
-    if ($attempts -ge $w -and $attempts -lt $c) {
+    if ($w -and $attempts -ge $w -and $attempts -lt $c) {
         $state = 1
-    } elseif ($c -gt 0 -and $attempts -ge $c) {
+    } elseif ($c -and $attempts -ge $c) {
         $state = 2
     }
 } catch {
