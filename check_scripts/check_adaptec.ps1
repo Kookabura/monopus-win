@@ -5,7 +5,8 @@ Param(
 
 )
 
-[array]$data=Invoke-Expression -Command "vendor\adaptec\arcconf.exe GETVERSION"
+$working_dir = Split-Path -path $MyInvocation.MyCommand.Path -Parent
+[array]$data=Invoke-Expression -Command "$working_dir\vendor\adaptec\arcconf.exe GETVERSION"
 [int32]$controllers = ($data[0] -split ' ')[-1]
 $state = 0
 $states_text = @('ok', 'warning', 'critical')
@@ -13,7 +14,7 @@ $bad_disks = @()
 $output = ''
 
 for ($i=1; $i -le $controllers; $i++) {
-    [string]$data=Invoke-Expression -Command "vendor\adaptec\arcconf.exe GETSMARTSTATS $i"
+    [string]$data=Invoke-Expression -Command "$working_dir\vendor\adaptec\arcconf.exe GETSMARTSTATS $i"
     # Checking SATA disks status
     $data -match "<SmartStats.*</SmartStats>" | Out-Null
     $sata = [xml]$matches[0]
