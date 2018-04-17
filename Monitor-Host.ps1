@@ -39,7 +39,7 @@ try {
         $response = Invoke-RestMethod $config.uri -Method Post -UseBasicParsing -Body $data
 
         $config | Add-Member @{id=$($response.data.id)} -PassThru -Force | Out-Null
-        $config | ConvertTo-Json | Set-Content -Path $config_path
+        $config | ConvertTo-Json -Compress | Set-Content -Path $config_path
     }
 
     # TO DO: Add check for several time before stopping because checks might be created later
