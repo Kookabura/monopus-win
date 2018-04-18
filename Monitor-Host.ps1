@@ -36,7 +36,7 @@ try {
             'drives' = ((gwmi win32_logicaldisk | ? {$_.drivetype -eq 3}).deviceid -replace ':') -join ','
         }
 
-        $response = Invoke-RestMethod $config.uri -Method Post -UseBasicParsing -Body $data
+        $response = Invoke-RestMethod $config.uri -Method Post -Body $data
 
         $config | Add-Member @{id=$($response.data.id)} -PassThru -Force | Out-Null
         $config | ConvertTo-Json -Compress | Set-Content -Path $config_path
