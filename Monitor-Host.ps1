@@ -78,7 +78,13 @@ while ($work) {
             $w = if($services[$key].warning) {"-w $($services[$key].warning)"} else {}
             $c = if($services[$key].critical) {"-c $($services[$key].critical)"} else {}
             
-            $result = iex "& `"$command`" $args $w $c"
+            if (Test-Path $command) {
+                $result = iex "& `"$command`" $args $w $c"
+            } else {
+                $lastexitcode = 3
+                $result = 'check_not_exsist_on_client'
+            }
+
             $r = Invoke-WebRequest $config.uri -Method Post -UseBasicParsing -Body @{api_key=$($config.api_key);id=$services[$key].id;mon_action='check/handle_result';result=$result;state=$lastexitcode}
             $response = $r.content | ConvertFrom-Json
             Write-Verbose $response
@@ -93,7 +99,7 @@ while ($work) {
                     $services[$key].interval = if ($response.data.interval) {$response.data.interval} Else {1}
 
                     # Get new services
-                    if ($response.data.newservices) {
+                    if ($response.data.push_checks) {
                         $services = Get-Services -Config $config
                     }
                 }
