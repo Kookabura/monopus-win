@@ -25,11 +25,12 @@ if (Test-path "C:\Program Files\HP\hpssacli\bin\hpssacli.exe") {
     if ($matches) {
         $state = 0
         $controllers = $data.Controllers."Response Data".'Number of Controllers'        
-        foreach ($slot in $matches) {
-            $drives = Invoke-Expression -Command "& 'C:\Program Files\HP\hpssacli\bin\hpssacli.exe' controller slot=$slot physicaldrive all show"
+        foreach ($slot in $matches.keys) {
+            $drives = Invoke-Expression -Command "& 'C:\Program Files\HP\hpssacli\bin\hpssacli.exe' controller slot=$($matches.Item($slot)) physicaldrive all show"
             foreach ($drive in $drives) {
                 if ($drive -match 'Failed') {
-                    $bad_drives += $drive -match "(?<=physicaldrive\s)\d.*\d(?=\s\()" | Out-Null
+                    $drive -match "(?<=physicaldrive\s)\d.*\d(?=\s\()" | Out-Null
+                    $matches.keys | % {$bad_drives += $matches.Item($_)}
                     $bad_controllers += $slot
                     $state = 2
                 }
@@ -38,7 +39,7 @@ if (Test-path "C:\Program Files\HP\hpssacli\bin\hpssacli.exe") {
 
     }
 
-    if ($bad_controllers) {
+    if ($bad_controllers.length) {
         $output = ("bad_controllers==" + ($bad_controllers -join ',') + "__bad_drives==" + ($bad_drives -join ','))
     }
 }
