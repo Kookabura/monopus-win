@@ -71,7 +71,7 @@ while ($work) {
 
         $updatedon = if ($services[$key].updatedon) {[int][double]::Parse((Get-Date -Date $services[$key].updatedon -UFormat %s))} else {0}
     
-        if ($services[$key].active -and $services[$key].passive -and $services[$key].command -and ($updatedon+$services[$key].interval*60) -lt $timestamp) {
+        if ($services[$key].active -and $services[$key].passive -and $services[$key].command -and (($updatedon+$services[$key].interval*60) -lt $timestamp -or $services[$key].state -eq 3)) {
 
             $args = if ($services[$key].args) {$services[$key].args -replace '=', ' '} else {''}
             $command = ($config.scripts_path + $services[$key].command + ".ps1")
