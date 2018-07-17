@@ -24,7 +24,7 @@ $bad_controllers = @()
 $output = ''
 
 if ($Legacy) {
-    $data = Invoke-Expression -Command "$working_dir\vendor\lsimegaraid\MegaCli.exe -LDInfo -LAll -aAll" | ? {$_ -match "State\s*:"} | ? {$_ -notmatch "Optimal"}
+    $data = Invoke-Expression -Command "& '$working_dir\vendor\lsimegaraid\MegaCli.exe' -LDInfo -LAll -aAll" | ? {$_ -match "State\s*:"} | ? {$_ -notmatch "Optimal"}
     if ($data) {
         $state = 2
     }
