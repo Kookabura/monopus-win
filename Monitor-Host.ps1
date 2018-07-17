@@ -20,6 +20,7 @@ $max_retries = 6
 $retry_interval = 10
 $work = $false
 $config_path = "${env:ProgramFiles(x86)}\MonOpus\main.cfg"
+$start = Get-Date
 
 try {
     $config = Get-Content -Raw -Path $config_path | ConvertFrom-Json
@@ -58,12 +59,12 @@ try {
     }
     
 } catch {
-    Write-Output ("Error on init stage: " + $_)
+    Write-Error ("Error on init stage: " + $_)
     exit 1
 }
 
 while ($work) {
-
+    Write-Verbose "$(get-date) Starting work..."
     $timestamp = [int][double]::Parse((Get-Date -UFormat %s))
     $bad_keys = @()
 
@@ -72,7 +73,9 @@ while ($work) {
         $updatedon = if ($services[$key].updatedon) {[int][double]::Parse((Get-Date -Date $services[$key].updatedon -UFormat %s))} else {0}
     
         if ($services[$key].active -and $services[$key].passive -and $services[$key].command -and (($updatedon+$services[$key].interval*60) -lt $timestamp -or $services[$key].state -eq 3)) {
-
+            
+            Write-Verbose "$(get-date) Handling service $key"
+           
             $args = if ($services[$key].args) {$services[$key].args -replace '=', ' '} else {''}
             $command = ($config.scripts_path + $services[$key].command + ".ps1")
             $w = if($services[$key].warning) {"-w $($services[$key].warning)"} else {}
@@ -85,12 +88,17 @@ while ($work) {
                 $result = 'check_not_exsist_on_client'
             }
 
-            $r = Invoke-WebRequest $config.uri -Method Post -UseBasicParsing -Body @{api_key=$($config.api_key);id=$services[$key].id;mon_action='check/handle_result';result=$result;state=$lastexitcode}
-            $response = $r.content | ConvertFrom-Json
-            Write-Verbose $response
+            try{
+                $r = Invoke-WebRequest $config.uri -Method Post -UseBasicParsing -Body @{api_key=$($config.api_key);id=$services[$key].id;mon_action='check/handle_result';result=$result;state=$lastexitcode}
+                $response = $r.content | ConvertFrom-Json
+                Write-Verbose "$(get-date) $response"
+            } catch {
+                Write-Error "$(get-date) $_"
+            }
             
             if ($r.statusCode -eq 200) {
                 if (!$response.success -or !$response.data) {
+                    Write-Verbose "$(get-date) Removing service $key. Response is $r"
                     $bad_keys += $key
                 } else {
 
@@ -114,7 +122,7 @@ while ($work) {
         }
     }
 
-    Write-Verbose ($services | Out-String)
+    Write-Verbose "$(get-date) $(ConvertTo-Json $services)"
 
 
     if (!$services.count) {
