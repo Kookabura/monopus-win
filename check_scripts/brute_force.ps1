@@ -15,7 +15,7 @@ $state = 0
 $attempts = 0
 
 try {
-    $attempts = (Get-EventLog -LogName Security -After (Get-Date).AddMinutes(('-' + $period)) -InstanceId 4625 -EntryType FailureAudit -ErrorAction SilentlyContinue |  Measure-Object -Sum -Property Index).Count
+    $attempts = (Get-WinEvent -FilterHashtable @{logname='security'; StartTime=$(Get-Date).AddMinutes(('-' + $period)); keywords=4503599627370496} -ErrorAction SilentlyContinue |  Measure-Object -Sum -Property Index).Count
     if ($w -and $attempts -ge $w -and $attempts -lt $c) {
         $state = 1
     } elseif ($c -and $attempts -ge $c) {
