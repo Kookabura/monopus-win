@@ -12,7 +12,7 @@
 [CmdletBinding()]
 Param(
     [Parameter()]
-    [boolean]$Legacy = $false
+    [int]$Legacy = 0
 )
 
 $working_dir = Split-Path -path $MyInvocation.MyCommand.Path -Parent
