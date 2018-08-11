@@ -92,7 +92,7 @@ while ($work) {
                 $parameters['c'] = $services[$key].critical
             }
             if ($services[$key].args) {
-                foreach ($p in ($services[$key].args -split '-')) {
+                foreach ($p in ($services[$key].args.trim('-') -split '-')) {
                      $a = $p.trim() -split '='
                      $parameters[$a[0]] = $a[1]
                 }
@@ -102,7 +102,7 @@ while ($work) {
 
             
             if (Test-Path $command) {
-                Write-Verbose "$(get-date) Starting check command $command"
+                Write-Verbose "$(get-date) Starting check command $command with parameters: $($parameters | ConvertTo-Json)"
 
                 $job = [PowerShell]::Create().AddScript({
                   param($command, $parameters)
