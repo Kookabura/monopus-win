@@ -1,4 +1,7 @@
-﻿# Host monitoring and sending data to monopus.io
+﻿[CmdletBinding()]
+PARAM()
+
+# Host monitoring and sending data to monopus.io
 Function Get-Services {
     [CmdletBinding()]
     Param(
@@ -15,12 +18,17 @@ Function Get-Services {
     }
 }
 
-
 $max_retries = 6
 $retry_interval = 10
 $work = $false
+$timeout = 10
 $config_path = "${env:ProgramFiles(x86)}\MonOpus\main.cfg"
 $start = Get-Date
+$logPath = "C:\Program Files (x86)\monOpus\Logfile.log"
+
+if ($logPath) {
+    Start-Transcript -Path $logPath
+}
 
 try {
     $config = Get-Content -Raw -Path $config_path | ConvertFrom-Json
@@ -64,7 +72,7 @@ try {
 }
 
 while ($work) {
-    Write-Verbose "$(get-date) Starting work..."
+    Write-Verbose "$(get-date) Starting work with services $(ConvertTo-Json $services)"
     $timestamp = [int][double]::Parse((Get-Date -UFormat %s))
     $bad_keys = @()
 
@@ -76,22 +84,63 @@ while ($work) {
             
             Write-Verbose "$(get-date) Handling service $key"
            
-            $args = if ($services[$key].args) {$services[$key].args -replace '=', ' '} else {''}
+            $parameters = @{}
+            if($services[$key].warning) {
+                $parameters['w'] = $services[$key].warning
+            }
+            if($services[$key].critical) {
+                $parameters['c'] = $services[$key].critical
+            }
+            if ($services[$key].args) {
+                foreach ($p in ($services[$key].args -split '-')) {
+                     $a = $p.trim() -split '='
+                     $parameters[$a[0]] = $a[1]
+                }
+            }
+
             $command = ($config.scripts_path + $services[$key].command + ".ps1")
-            $w = if($services[$key].warning) {"-w $($services[$key].warning)"} else {}
-            $c = if($services[$key].critical) {"-c $($services[$key].critical)"} else {}
+
             
             if (Test-Path $command) {
-                $result = iex "& `"$command`" $args $w $c"
+                Write-Verbose "$(get-date) Starting check command $command"
+
+                $job = [PowerShell]::Create().AddScript({
+                  param($command, $parameters)
+                  $parameters.output = & $command @parameters
+                  $parameters.code = $LASTEXITCODE
+                }).AddArgument($command).AddArgument($parameters)
+
+                # start thee job
+                $async = $job.BeginInvoke()
+
+                $n = 0
+                while (!$async.IsCompleted -and $n -le $timeout) {
+                    $n++
+                    sleep 1
+                }
+
+                if ($n -gt $timeout) {
+                    Write-Verbose "$(get-date) Timeout exceeded"
+                    $job.Stop()
+                } else {
+                    $result = $parameters.output
+                    $lastexitcode = $parameters.code
+                    $job.EndInvoke($async)
+                }
+
+
             } else {
                 $lastexitcode = 3
                 $result = 'check_not_exsist_on_client'
             }
 
             try{
-                $r = Invoke-WebRequest $config.uri -Method Post -UseBasicParsing -Body @{api_key=$($config.api_key);id=$services[$key].id;mon_action='check/handle_result';result=$result;state=$lastexitcode}
-                $response = $r.content | ConvertFrom-Json
-                Write-Verbose "$(get-date) $response"
+                if ($result) {
+                    Write-Verbose "$(get-date) Sending result to monOpus. The result is $result"
+                    $r = Invoke-WebRequest $config.uri -Method Post -UseBasicParsing -Body @{api_key=$($config.api_key);id=$services[$key].id;mon_action='check/handle_result';result=$result;state=$lastexitcode}
+                    $response = $r.content | ConvertFrom-Json
+                    Write-Verbose "$(get-date) $response"
+                }
             } catch {
                 Write-Error "$(get-date) $_"
             }
@@ -122,7 +171,7 @@ while ($work) {
         }
     }
 
-    Write-Verbose "$(get-date) $(ConvertTo-Json $services)"
+    Write-Verbose "$(get-date) Finished with services $(ConvertTo-Json $services)"
 
 
     if (!$services.count) {
@@ -131,4 +180,8 @@ while ($work) {
 
     sleep -Seconds 60
 
+}
+
+if ($logPath) {
+    Stop-Transcript
 }
