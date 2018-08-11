@@ -26,7 +26,7 @@ $config_path = "${env:ProgramFiles(x86)}\MonOpus\main.cfg"
 $start = Get-Date
 $logPath = "C:\Program Files (x86)\monOpus\Logfile.log"
 
-if ($logPath) {
+if ($logPath -and $PSCmdlet.MyInvocation.BoundParameters["Verbose"].IsPresent) {
     Start-Transcript -Path $logPath
 }
 
@@ -123,6 +123,9 @@ while ($work) {
                     Write-Verbose "$(get-date) Timeout exceeded"
                     $job.Stop()
                 } else {
+                    if ($job.HadErrors) {
+                        Write-Verbose "$(get-date) Job finished with error $($job.Streams.Error)"
+                    }
                     $result = $parameters.output
                     $lastexitcode = $parameters.code
                     $job.EndInvoke($async)
