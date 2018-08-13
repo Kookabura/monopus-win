@@ -101,6 +101,7 @@ while ($work) {
             $command = ($config.scripts_path + $services[$key].command + ".ps1")
 
             
+            $result = $false
             if (Test-Path $command) {
                 Write-Verbose "$(get-date) Starting check command $command with parameters: $($parameters | ConvertTo-Json)"
 
