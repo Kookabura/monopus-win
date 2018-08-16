@@ -1,77 +1,82 @@
 ﻿[CmdletBinding()]
-PARAM()
+PARAM(
+    [Parameter()]
+    [int]$max_retries = 6,
+    [Parameter()]
+    [int]$retry_interval = 10,
+    [Parameter()]
+    [boolean]$work = $false,
+    [Parameter()]
+    [int]$timeout = 30,
+    [Parameter()]
+    [string]$config_path = "${env:ProgramFiles(x86)}\MonOpus\main.cfg"
+)
 
-# Host monitoring and sending data to monopus.io
-Function Get-Services {
-    [CmdletBinding()]
-    Param(
-        [Parameter(Mandatory=$true)]
-        $Config
-    )
-    process {
-        $settings_obj = (Invoke-WebRequest $config.uri -Method Post -UseBasicParsing -Body @{api_key=$($config.api_key);id=$($config.id);mon_action='check/status';class="host"}).content | ConvertFrom-Json
-        $services = @{}
-        if ($settings_obj -and $settings_obj.data.services) {
-            ($settings_obj.data.services).psobject.properties  | % {$services[$_.Name] = $_.Value}
+Begin {
+    # Host monitoring and sending data to monopus.io
+    Function Get-Services {
+        [CmdletBinding()]
+        Param(
+            [Parameter(Mandatory=$true)]
+            $Config
+        )
+        process {
+            $settings_obj = (Invoke-WebRequest $config.uri -Method Post -UseBasicParsing -Body @{api_key=$($config.api_key);id=$($config.id);mon_action='check/status';class="host"}).content | ConvertFrom-Json
+            $services = @{}
+            if ($settings_obj -and $settings_obj.data.services) {
+                ($settings_obj.data.services).psobject.properties  | % {$services[$_.Name] = $_.Value}
+            }
+            return $services
         }
-        return $services
-    }
-}
-
-$max_retries = 6
-$retry_interval = 10
-$work = $false
-$timeout = 10
-$config_path = "${env:ProgramFiles(x86)}\MonOpus\main.cfg"
-$start = Get-Date
-$logPath = "C:\Program Files (x86)\monOpus\Logfile.log"
-
-if ($logPath -and $PSCmdlet.MyInvocation.BoundParameters["Verbose"].IsPresent) {
-    Start-Transcript -Path $logPath
-}
-
-try {
-    $config = Get-Content -Raw -Path $config_path | ConvertFrom-Json
-
-    if (!$config.id) {
-        $op_system = gwmi win32_operatingsystem
-        $data = @{
-            'name' = (hostname);
-            'address' = (Invoke-RestMethod http://ipinfo.io/json | Select -exp ip);
-            'os' = $op_system.caption;
-            'memory' = (('{0:N0}' -f ($op_system.TotalVisibleMemorySize / 1Mb)) + 'Gb');
-            'api_key' = $config.api_key;
-            'mon_action' = 'site/create';
-            'drives' = ((gwmi win32_logicaldisk | ? {$_.drivetype -eq 3}).deviceid -replace ':') -join ','
-        }
-
-        $response = Invoke-RestMethod $config.uri -Method Post -Body $data
-
-        $config | Add-Member @{id=$($response.data.id)} -PassThru -Force | Out-Null
-        $config | ConvertTo-Json -Compress | Set-Content -Path $config_path
     }
 
-    # TO DO: Add check for several time before stopping because checks might be created later
-    for ($i=1; $i -le $max_retries; $i++) {
-        if ($services = Get-Services -Config $config) {
-            $work = $true
-            break;
-        } else {
-            if ($i -eq $max_retries) {
-                Write-Output "There are no services for this host"
-                exit
+
+}
+
+Process {
+
+    try {
+        $config = Get-Content -Raw -Path $config_path | ConvertFrom-Json
+
+        if (!$config.id) {
+            $op_system = gwmi win32_operatingsystem
+            $data = @{
+                'name' = (hostname);
+                'address' = (Invoke-RestMethod http://ipinfo.io/json | Select -exp ip);
+                'os' = $op_system.caption;
+                'memory' = (('{0:N0}' -f ($op_system.TotalVisibleMemorySize / 1Mb)) + 'Gb');
+                'api_key' = $config.api_key;
+                'mon_action' = 'site/create';
+                'drives' = ((gwmi win32_logicaldisk | ? {$_.drivetype -eq 3}).deviceid -replace ':') -join ','
+            }
+
+            $response = Invoke-RestMethod $config.uri -Method Post -Body $data
+
+            $config | Add-Member @{id=$($response.data.id)} -PassThru -Force | Out-Null
+            $config | ConvertTo-Json -Compress | Set-Content -Path $config_path
+        }
+
+        # TO DO: Add check for several time before stopping because checks might be created later
+        for ($i=1; $i -le $max_retries; $i++) {
+            if ($services = Get-Services -Config $config) {
+                $work = $true
+                break;
             } else {
-                sleep -Seconds $retry_interval
+                if ($i -eq $max_retries) {
+                    Write-Output "There are no services for this host"
+                    exit
+                } else {
+                    sleep -Seconds $retry_interval
+                }
             }
         }
-    }
     
-} catch {
-    Write-Error ("Error on init stage: " + $_)
-    exit 1
-}
+    } catch {
+        Write-Error ("Error on init stage: " + $_)
+        exit 1
+    }
 
-while ($work) {
+                                                                                                                                                                                                                                                                                                                                                                                        while ($work) {
     Write-Verbose "$(get-date) Starting work with services $(ConvertTo-Json $services)"
     $timestamp = [int][double]::Parse((Get-Date -UFormat %s))
     $bad_keys = @()
@@ -184,8 +189,9 @@ while ($work) {
 
     sleep -Seconds 60
 
+    }
 }
 
-if ($logPath) {
-    Stop-Transcript
+End {
+
 }
