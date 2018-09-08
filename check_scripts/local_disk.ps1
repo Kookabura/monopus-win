@@ -25,7 +25,7 @@ foreach ($vol in $volumes) {
   
   if ($vol.FreeSpace -lt 1Gb) {
     $free_units = "$([math]::Round($vol.FreeSpace/1Mb))Mb"
-  } elseif ($used_units -lt 1Tb) {
+  } elseif ($vol.FreeSpace -lt 1Tb) {
     $free_units = "$([math]::Round($vol.FreeSpace/1Gb, 1))Gb"
   } else {
     $free_units = "$([math]::Round($vol.FreeSpace/1Tb, 1))Tb"
