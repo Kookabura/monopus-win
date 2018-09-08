@@ -22,7 +22,16 @@ foreach ($vol in $volumes) {
   $used_pct = [math]::Round($used_units*100/$vol.Size)
   $free_pct = [math]::Round($vol.FreeSpace*100/$vol.Size)
   $disk_name = $vol.DeviceID -replace "[^a-z]"
-  $output += "dev==$($disk_name)__dused_units==$($used_units)__dused_pct==$($used_pct)"
+  
+  if ($vol.FreeSpace -lt 1Gb) {
+    $free_units = "$([math]::Round($vol.FreeSpace/1Mb))Mb"
+  } elseif ($used_units -lt 1Tb) {
+    $free_units = "$([math]::Round($vol.FreeSpace/1Gb, 1))Gb"
+  } else {
+    $free_units = "$([math]::Round($vol.FreeSpace/1Tb, 1))Tb"
+  }
+
+  $output += "dev==$($disk_name)__free_units==$($free_units)__dused_units==$($used_units)__dused_pct==$($used_pct)"
   $perf += $disk_name + '=' + [math]::Round($used_units/1Mb) + "MB;" + [math]::Round($vol.Size*$w/100/1MB) + ';' + [math]::Round($vol.Size*$c/100/1MB) + ';0;' + [math]::Round($vol.Size/1Mb) + ' '
   if ($w -and $c) {
       if ($free_pct -le $W -and $free_pct -gt $C) {
