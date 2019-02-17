@@ -1,4 +1,9 @@
 ﻿function Monitor-Host {
+    <#
+    .Synopsis
+        Execute scripts with config from monopus.io. Requires Powershell 3.0
+    #>
+
     [CmdletBinding()]
     PARAM(
         [Parameter()]
@@ -204,4 +209,5 @@
     }
 }
 
+#requires -Version 3.0
 Monitor-Host
