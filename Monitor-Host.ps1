@@ -69,7 +69,7 @@
 
             # TO DO: Add check for several time before stopping because checks might be created later
             for ($i=1; $i -le $max_retries; $i++) {
-                Write-Verbose "$(get-date) Getting services for config: $($config | ConvertTo-Json)"
+                Write-Verbose "$(get-date) Getting services for config: $($config | ConvertTo-Json -Compress)"
                 if ($services = Get-Services -Config $config) {
                     $work = $true
                     break;
