@@ -28,7 +28,7 @@ try {
 }
 
 
-$output = "brute_force.$($states_text[$state])::attempts==$attempts | attempts=$perf;;;"
+$output = "brute_force.$($states_text[$state])::attempts==$attempts | attempts=$attempts;;;"
 
 $host.ui.RawUI.ForegroundColor = $($state_colors[$state])
 Write-Output $output
