@@ -18,15 +18,24 @@ $state = 0
 $W = $W -replace "[^0-9]"
 $C = $C -replace "[^0-9]"
 
-Write-Verbose "Проверяем диск $($drive):"
-$vol = gwmi Win32_LogicalDisk -Filter "DriveType=3 and DeviceID='$($drive):'"
+Write-Verbose "Проверяем диск $drive"
+if ($drive.Length -eq 1) {
+    $drive += ':\'
+} elseif ($drive.Length -eq 2) {
+    $drive += '\'
+}
+
+$drive = $drive -replace '\\','\\'
+
+$vol = gwmi Win32_Volume -Filter "Name='$($drive)'"
 
 if ($vol) {
 
-  $used_units = $vol.Size - $vol.FreeSpace
-  $used_pct = [math]::Round($used_units*100/$vol.Size)
-  $free_pct = [math]::Round($vol.FreeSpace*100/$vol.Size)
-  $disk_name = $vol.DeviceID -replace "[^a-z]"
+  $used_units = $vol.Capacity - $vol.FreeSpace
+  $used_pct = [math]::Round($used_units*100/$vol.Capacity)
+  $free_pct = [math]::Round($vol.FreeSpace*100/$vol.Capacity)
+
+  $disk_name = $drive.trim(':\').Replace('\\','\')
   
   if ($vol.FreeSpace -lt 1Gb) {
     $free_units = "$([math]::Round($vol.FreeSpace/1Mb))Mb"
@@ -36,8 +45,8 @@ if ($vol) {
     $free_units = "$([math]::Round($vol.FreeSpace/1Tb, 1))Tb"
   }
 
-  $output += "::dev==$($disk_name)__free_units==$($free_units)__dused_units==$($used_units)__dused_pct==$($used_pct)"
-  $perf += $disk_name + '=' + [math]::Round($used_units/1Mb) + "MB;" + [math]::Round($vol.Size*$w/100/1MB) + ';' + [math]::Round($vol.Size*$c/100/1MB) + ';0;' + [math]::Round($vol.Size/1Mb) + ' '
+  $output += "::dev==$($disk_name)__free_units==$($free_units)__dused_units==$([math]::Round($used_units/1Mb))__dused_pct==$($used_pct)"
+  $perf += $disk_name + '=' + [math]::Round($used_units/1Mb) + "MB;" + [math]::Round($vol.Capacity*$w/100/1MB) + ';' + [math]::Round($vol.Capacity*$c/100/1MB) + ';0;' + [math]::Round($vol.Capacity/1Mb) + ' '
   if ($w -and $c) {
       if ($free_pct -le $W -and $free_pct -gt $C) {
         $state = 1
