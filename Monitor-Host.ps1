@@ -104,9 +104,14 @@
                         $parameters['c'] = $services[$key].critical
                     }
                     if ($services[$key].args) {
-                        foreach ($p in ($services[$key].args.trim('-') -split '-')) {
+                        foreach ($p in ($services[$key].args.trim('--') -split '--')) {
                              $a = $p.trim() -split '='
-                             $parameters[$a[0]] = $a[1]
+                             if ($a[1] -match ',') {
+                                $value = $a[1] -split ','
+                             } else {
+                                $value = $a[1]
+                             }
+                             $parameters[$a[0]] = $value
                         }
                     }
 

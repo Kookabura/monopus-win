@@ -12,11 +12,14 @@ $state_colors = @('Green', 'Yellow', 'Red', 'DarkGray')
 $state = 0
 # TO DO проверять существование коллекции. Что будет если запустить без коллекции через Monitor-Host?
 if ($servers = Get-RDSessionHost -CollectionName $CollectionName -ErrorAction SilentlyContinue) {
+    $perf_max = $servers.count
+    $output += "collection==$($CollectionName)"
     if ($servers = $servers | ? {$_.NewConnectionAllowed -ne 'Yes'}) {
         $names = $servers.SessionHost -join ','
-        $output = "servers==$($names)"
+        $output += "__servers==$($names)"
         $state = 1
     }
+    $perf = "servers=" + $servers.count + ";1;1;0;" + $perf_max
 } else {
     $state = 3
 }
