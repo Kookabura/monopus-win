@@ -210,4 +210,4 @@
 }
 
 #requires -Version 3.0
-Monitor-Host
+Monitor-Host *>> "$PSScriptRoot\log.log"
