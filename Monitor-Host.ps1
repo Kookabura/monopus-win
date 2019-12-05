@@ -85,7 +85,8 @@
 
         while ($work) {
             Write-Verbose "$(get-date) Starting work with services $(ConvertTo-Json $services)"
-            $timestamp = [int][double]::Parse((Get-Date -UFormat %s))
+            $date = [System.TimeZoneInfo]::ConvertTimeBySystemTimeZoneId((Get-Date), 'Russian Standard Time')
+            $timestamp = [int][double]::Parse((Get-Date $date -UFormat %s))
             $bad_keys = @()
 
             foreach ($key in $services.Keys) {
@@ -211,3 +212,4 @@
 
 #requires -Version 3.0
 Monitor-Host
+#Monitor-Host -Verbose *>> "$PSScriptRoot\log.log"
