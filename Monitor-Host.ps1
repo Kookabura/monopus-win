@@ -44,6 +44,7 @@
         try {
             $config = Get-Content -Raw -Path $config_path | ConvertFrom-Json
 
+            #Create checks and host_id if $config_id is empty
             if (!$config.id) {
                 Write-Verbose "Creating new item as there is no id in config"
                 $op_system = gwmi win32_operatingsystem
@@ -85,15 +86,15 @@
 
         while ($work) {
             Write-Verbose "$(get-date) Starting work with services $(ConvertTo-Json $services)"
-            $date = [System.TimeZoneInfo]::ConvertTimeBySystemTimeZoneId((Get-Date), 'Russian Standard Time')
-            $timestamp = [int][double]::Parse((Get-Date $date -UFormat %s))
-            $bad_keys = @()
+            $timestamp = [int][double]::Parse((Get-Date -UFormat %s))
 
+            $bad_keys = @()
             foreach ($key in $services.Keys) {
 
                 $updatedon = if ($services[$key].updatedon) {[int][double]::Parse((Get-Date -Date $services[$key].updatedon -UFormat %s))} else {0}
-    
-                if ($services[$key].active -and $services[$key].passive -and $services[$key].command -and (($updatedon+$services[$key].interval*60) -lt $timestamp -or $services[$key].state -eq 3)) {
+                
+                # Handle the service only if it's active, passive, has command attribute and it's tie for that or bad state 
+                if ($services[$key].active -and $services[$key].passive -and $services[$key].command -and (($updatedon+$services[$key].interval*60) -lt $timestamp -or $services[$key].state -ge 1)) {
             
                     Write-Verbose "$(get-date) Handling service $key"
            
@@ -124,10 +125,11 @@
                         Write-Verbose "$(get-date) Starting check command $command with parameters: $($parameters | ConvertTo-Json)"
 
                         $job = [PowerShell]::Create().AddScript({
-                          param($command, $parameters)
+                          param($command, $parameters, $config)
+                          $global:a = $config
                           $parameters.output = & $command @parameters
                           $parameters.code = $LASTEXITCODE
-                        }).AddArgument($command).AddArgument($parameters)
+                        }).AddArgument($command).AddArgument($parameters).AddArgument($config)
 
                         # start thee job
                         $async = $job.BeginInvoke()
@@ -142,7 +144,7 @@
                             Write-Verbose "$(get-date) Timeout exceeded"
                             $job.Stop()
                         } else {
-                            if ($job.HadErrors) {
+                            if ($job.HadErrors -and $job.Streams.Error) {
                                 Write-Verbose "$(get-date) Job finished with error $($job.Streams.Error)"
                             }
                             $result = $parameters.output
@@ -158,10 +160,18 @@
 
                     try{
                         if ($result) {
-                            Write-Verbose "$(get-date) Sending result to monOpus. The result is $result"
-                            $r = Invoke-WebRequest $config.uri -Method Post -UseBasicParsing -Body @{api_key=$($config.api_key);id=$services[$key].id;mon_action='check/handle_result';result=$result;state=$lastexitcode}
-                            $response = $r.content | ConvertFrom-Json
-                            Write-Verbose "$(get-date) $response"
+                            
+                            # Send result only if state is changed or it's time fot that
+                            if ($services[$key].state -ne $lastexitcode -or (($updatedon+$services[$key].interval*60) -lt $timestamp)) {
+                                Write-Verbose "$(get-date) Sending result to monOpus. The result is $result"
+                                $r = Invoke-WebRequest $config.uri -Method Post -UseBasicParsing -Body @{api_key=$($config.api_key);id=$services[$key].id;mon_action='check/handle_result';result=$result;state=$lastexitcode}
+                                $response = $r.content | ConvertFrom-Json
+                                Write-Verbose "$(get-date) $response"
+                            } else {
+                                Write-Verbose "$(get-date) State hasn't changed and it's early to send. Skipping sending to monOpus. $result"
+                                continue
+                            }
+                            
                         }
                     } catch {
                         Write-Error "$(get-date) $_"
@@ -211,5 +221,4 @@
 }
 
 #requires -Version 3.0
-Monitor-Host
-#Monitor-Host -Verbose *>> "$PSScriptRoot\log.log"
+Monitor-Host # Add for logging: *>> "$PSScriptRoot\log.log"
