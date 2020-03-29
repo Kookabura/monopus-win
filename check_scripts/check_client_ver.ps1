@@ -58,8 +58,7 @@ Process {
     if ($latest_version -gt [System.Version]$config.version) {
         Write-Output $latest_version
         if ($v = Update-MonOpusClient -Config $Config -NewVersion $latest_version) {
-            Write-Output 'Test'
-            $output += "ver==$v"
+            
             $config | Add-Member @{version=$v.ToString()} -PassThru -Force | Out-Null
             $Config | ConvertTo-Json -Compress | Set-Content -Path "$($Config.installation_path)\main.cfg"
             cmd /c "SCHTASKS /End /TN $($config.task_name) && SCHTASKS /Run /TN $($config.task_name)"
@@ -68,6 +67,7 @@ Process {
         }
     }
 
+    $output += "ver==$($config.version.toString())"
     $output = "check_client_ver_$($states_text[$state])::$output | $perf"
     Write-Verbose $output
     Write-Output $output
