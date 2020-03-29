@@ -2,7 +2,7 @@
     'api_key': 'your_api_key',
     'uri': 'https://monopus.io/api.json',
     'scripts_path': 'C:\\Program Files (x86)\\MonOpus\\check_scripts\\',
-    'installation_path': ''C:\\Program Files (x86)\\MonOpus\\',
+    'installation_path': 'C:\\Program Files (x86)\\MonOpus\\',
     'version': '1.4.0',
     'task_name': "Monitoring"
 }
