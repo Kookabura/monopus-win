@@ -243,7 +243,7 @@ function Backup-SQLDatabase {
         $date = Get-Date
 
         # Существует ли папка для бекапа
-        if (!Test-Path $path) {
+        if (!(Test-Path $path)) {
             throw "Backup path $path not found. Cannot proccess backup."
         }
 
