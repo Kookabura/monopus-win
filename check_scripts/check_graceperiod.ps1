@@ -24,7 +24,7 @@ $grace = ((gwmi -namespace "Root/CIMV2/TerminalServices" Win32_TerminalServiceSe
 
 # Финал
 
-$output = "rdp_grace_repiod.$($states_text[$state])::daysleft==$days | days=$days;;;" # здесь должно быть кол-во дней до конца периода видно. По ним график будет рисоваться.
+$output = "rdp_grace_repiod.$($states_text[$state])::daysleft==$grace | days=$grace;;;" # здесь должно быть кол-во дней до конца периода видно. По ним график будет рисоваться.
 
 $host.ui.RawUI.ForegroundColor = $($state_colors[$state])
 Write-Output $output
