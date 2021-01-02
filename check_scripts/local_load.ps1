@@ -3,7 +3,9 @@ Param(
   [Parameter()]
    [int32]$W = 90,
   [Parameter()]
-   [int32]$C = 95
+   [int32]$C = 95,
+  [Parameter()]
+    $config = $global:config
 )
 
 $states_text = @('ok', 'war', 'critical')
@@ -21,7 +23,7 @@ if (Test-Path $tmp) {
     $indices = @{}
 }
 
-if ($indices['cpu'] -ne $null) {
+if ($indices['cpu'] -ne $null -and (Get-Date) -lt (ls $tmp).LastWriteTime.AddMinutes(60)) {
     $first = $true
 }
 
