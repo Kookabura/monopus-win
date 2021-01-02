@@ -106,8 +106,10 @@
                         $parameters['c'] = $services[$key].critical
                     }
                     if ($services[$key].args) {
-                        foreach ($p in ($services[$key].args.trim('--') -split '--')) {
-                             $a = $p.trim() -split '='
+                        $tmp = [System.Collections.ArrayList]($services[$key].args.trim() -replace "\s+"," " -split '^-| -')
+                        $tmp.RemoveAt(0)
+                        foreach ($p in $tmp) {
+                             $a = -split $p.trim()
                              if ($a[1] -match ',') {
                                 $value = $a[1] -split ','
                              } else {
@@ -179,7 +181,7 @@
             
                     if ($r.statusCode -eq 200) {
                         if (!$response.success -or !$response.data) {
-                            Write-Verbose "$(get-date) Removing service $key. Response is $r"
+                            Write-Verbose "$(get-date) Removing service $key. Response is $response"
                             $bad_keys += $key
                         } else {
 
