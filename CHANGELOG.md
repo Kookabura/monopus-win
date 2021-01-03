@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+## [1.5.1] - 2021-01-03
+
+### Changed
+- Fixed args parsing if value contains a space
+- Improved check_client_ver check to prevent multiple config file update
+
 ## [1.5.0] - 2021-01-03
 
 ### Added
