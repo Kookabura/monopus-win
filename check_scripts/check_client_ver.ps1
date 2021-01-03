@@ -20,6 +20,13 @@ Begin {
                 try {
 
                     if (Test-Path $Config.installation_path) {
+                        
+                        Try { [io.file]::OpenWrite("$($Config.installation_path)\file.tmp").close() }
+                        Catch { 
+                            Write-Warning "Unable to write to output file $outputfile"
+                            return $false
+                        }
+
                         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
                         Invoke-WebRequest "https://github.com/Kookabura/monopus-win/archive/$NewVersion.zip" -OutFile "$env:TEMP\monopus-win.zip" -UseBasicParsing
 
@@ -56,7 +63,6 @@ Process {
     #Check updates
     $latest_version = [System.Version](Invoke-WebRequest "https://monopus.io/ver.txt" -UseBasicParsing).content
     if ($latest_version -gt [System.Version]$config.version) {
-        Write-Output $latest_version
         if ($v = Update-MonOpusClient -Config $Config -NewVersion $latest_version) {
             
             $config | Add-Member @{version=$v.ToString()} -PassThru -Force | Out-Null
