@@ -109,7 +109,7 @@
                         $tmp = [System.Collections.ArrayList]($services[$key].args.trim() -replace "\s+"," " -split '^-| -')
                         $tmp.RemoveAt(0)
                         foreach ($p in $tmp) {
-                             $a = -split $p.trim()
+                             $a = $p.trim() -split " ",2
                              if ($a[1] -match ',') {
                                 $value = $a[1] -split ','
                              } else {
