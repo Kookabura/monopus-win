@@ -43,13 +43,13 @@ if ($process -eq '%') {
             
             $sample = $perf | Measure-Object -Sum -Property PercentProcessorTime
 
-            if ($indices['cpu'] -ne $null -and $indices['cpu'][$p] -ne $null -and (Get-Date) -lt (ls $tmp).LastWriteTime.AddMinutes(60)) {
+            if ($indices.count -gt 0 -and $indices['cpu'] -ne $null -and $indices['cpu'][$p] -ne $null -and (Get-Date) -lt (ls $tmp).LastWriteTime.AddMinutes(60)) {
                 $first = $true
             }
 
             if (!$first) {
 
-                if ($indices['cpu'] -ne $null) {
+                if ($indices.count -gt 0 -and $indices['cpu'] -ne $null) {
                     $indices['cpu'][$p] = $sample.sum
                 } else {
                     $indices = @{'cpu' = @{
