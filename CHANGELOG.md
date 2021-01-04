@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+## [1.5.2] - 2021-01-04
+
+### Changed
+- Fixed result sending moment determination for hosts that are in different timezones
+- Fixed process_load error if temp xml is empty
+
 ## [1.5.1] - 2021-01-03
 
 ### Changed
