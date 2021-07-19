@@ -7,7 +7,7 @@ $states_text = @('ok', 'warning', 'critical')
 $state = 0
 
 #проверка
-$Events = Get-WinEvent -FilterHashtable @{LogName='Application'; ID=502} -ErrorAction SilentlyContinue | ? {$_.TimeCreated -le (Get-Date).AddDays(-2)}
+$Events = Get-WinEvent -FilterHashtable @{LogName='Application'; ID=502} -ErrorAction SilentlyContinue | ? {$_.TimeCreated -ge (Get-Date).AddDays(-2)}
 $EventsCount = $Events.Count
 #
 
