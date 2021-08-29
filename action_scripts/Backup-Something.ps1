@@ -58,7 +58,7 @@
     Process {
         # Перемещаем копии на сетевое хранилище
 
-        $dtarget = "$TargetPath\daily\$($tmpfile.basename)_daily_$($date.ToString('dd-MM'))$($tmpfile.extension)"
+        $dtarget = "$TargetPath\daily\$($tmpfile.basename)_daily_$($date.ToString('ddMMHHmmss'))$($tmpfile.extension)"
         
         if (($tmpfile.fullname -split ':\\')[0] -eq ($dtarget -split ':\\')[0] -and ($tmpfile.Extension -eq '.zip' -or !$compress)) {
             # Если в рамках одного диска
