@@ -273,7 +273,7 @@ function Backup-SQLDatabase {
                 Write-Verbose "Automatic mode was detected. Checking if database is in full mode to process full or log backup."
 
                 # Check if db is in full mode. If not switch to full backup? Or check the lastest full backup date?
-                $database_object = $srv.databases | ? {$_.name -match $database}
+                $database_object = $srv.databases | ? {$_.name -eq $database}
 
                 if ($database_object.recoverymodel -ne 'simple') {
                     # If yes check last database full backup. If yesterday do full backup then. If it was today do log backup then.
@@ -292,7 +292,7 @@ function Backup-SQLDatabase {
             Write-Verbose "Backup path is $path. Backup action is $($backup.action)."
             
             # If we're backuping log we should truncate them.
-            if ($Type -eq "Log") {
+            if ($Type -eq "Database") {
                 $backup.LogTruncation = 'Truncate'
             }
 
