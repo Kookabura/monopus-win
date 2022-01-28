@@ -47,17 +47,18 @@ if (!$first) {
 
     $sample = [wmi]"Win32_PerfRawData_Tcpip_NetworkInterface.Name='$InterfaceName'"
     $now = [DateTimeOffset]::Now.ToUnixTimeSeconds()
+    # ToDo: average can't be lower than 0
     $average_MbReceivedPersec = [math]::Round(($sample.BytesReceivedPersec - $indices["net_$int_hash"]['BytesReceivedPersec']) / ($now - $indices["net_$int_hash"]['timestamp']) / 125000, 4)
     $average_MbSentPersec = [math]::Round(($sample.BytesSentPersec - $indices["net_$int_hash"]['BytesSentPersec']) / ($now - $indices["net_$int_hash"]['timestamp']) / 125000, 4)
     $indices["net_$int_hash"]['BytesReceivedPersec'] = $sample.BytesReceivedPersec
     $indices["net_$int_hash"]['BytesSentPersec'] = $sample.BytesSentPersec
     $indices["net_$int_hash"]['timestamp'] = $now
-    $output = "MbReceivedPersec==$($average_MbReceivedPersec)__MbSentPersec==$($average_MbSentPersec) | mbreceivedpersec=$average_MbReceivedPersec;$w;$c;0; mbsentpersec=$average_MbSentPersec;$w;$c;0;"
+    $output = "in==$($average_MbReceivedPersec)__out==$($average_MbSentPersec) | mbreceivedpersec=$average_MbReceivedPersec;$w;$c;0; mbsentpersec=$average_MbSentPersec;$w;$c;0;"
 }
 
-if ($average -ge $w -and $average -lt $c) {
+if (($average_MbReceivedPersec -ge $w -and $average_MbReceivedPersec -lt $c) -or ($average_MbSentPersec -ge $w -and $average_MbSentPersec -lt $c)) {
     $state = 1
-} elseif ($average -ge $c) {
+} elseif ($average_MbReceivedPersec -ge $c -or $average_MbSentPersec -ge $c) {
     $state = 2
 }
 
