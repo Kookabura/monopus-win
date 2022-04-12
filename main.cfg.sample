@@ -3,6 +3,6 @@
     'uri': 'https://monopus.io/api.json',
     'scripts_path': 'C:\\Program Files (x86)\\MonOpus\\check_scripts\\',
     'installation_path': 'C:\\Program Files (x86)\\MonOpus\\',
-    'version': '1.4.0',
+    'version': '1.5.2',
     'task_name': "Monitoring"
 }
