@@ -165,9 +165,13 @@ function Backup-Mikrotik {
     [Parameter(Mandatory=$true, ValueFromPipeline=$true)]
     [string]$Path,
     [string]$Prefix)
-
+      
     Begin{
-        
+        #проверка модуля POSH-SSH неободиомого для работы функции
+	if (-not (Get-Module -ListAvailable -Name POSH-SSH)) {
+    	    Write-Host "You need to install POSH-SSH Module!"
+	        Exit
+        }       
         $pscred = New-Object Management.Automation.PSCredential(
             $Login,
             (ConvertTo-SecureString $Pass -AsPlainText -Force)
@@ -175,27 +179,33 @@ function Backup-Mikrotik {
         $ssh = New-SSHSession $MHost -AcceptKey -Credential $pscred -ErrorAction Stop
     }
     Process{
+        if (!$prefix) {   
+             $out = (Invoke-SSHCommand $ssh -Command ("/system identity print") -EnsureConnection).Output 
+             $name = (($out -split "\r\n" | select-string name) -split ":")[1].trim() -replace " ","_"   #добавляем replace для случаев имени с пробелами      
+             $fname = $name                                             
+        }    
+        else {
+             $fname = $prefix                           
+        }                 
+                   
+        $currentDate=Get-Date -Format yyyyMMdd                     
 
-        if (!$prefix) {
-            $out = (Invoke-SSHCommand $ssh -Command "/system identity print" -EnsureConnection).Output
-            $name = (($out -split "\r\n" | select-string name) -split ":")[1].trim()
-            $prefix = "$($name)"
-        }
-
-        $currentDate=Get-Date -Format yyyyMMdd
-
-        $fname = $prefix
-
-        $out = (Invoke-SSHCommand $ssh -Command "/system backup save name=$fname password=$currentDate" -EnsureConnection).Output
+        $out = (Invoke-SSHCommand $ssh -Command ("/system backup save name=$fname password=$currentDate") -EnsureConnection).Output                
+        #Добавляем бекапы rsc(просто текстовый файл, как в Cisco)
+        $out2 = (Invoke-SSHCommand $ssh -Command ("/export file=$fname") -EnsureConnection).Output        
 
         if($out.Trim() -eq "Configuration backup saved")
         {
-	        $sftp = New-SFTPSession $MHost -AcceptKey -Credential $pscred
-            $TargetPath = "$path\$fname.backup"
-	        Get-SFTPFile -SFTPSession $sftp -RemoteFile "/$fname.backup" -LocalPath $Path -Overwrite
-	        Remove-SFTPItem -SFTPSession $sftp -Path "/$fname.backup" -Force
-	        Remove-SFTPSession $sftp | Out-Null
-            Write-Output $TargetPath
+	    $sftp = New-SFTPSession $MHost -AcceptKey -Credential $pscred
+            
+            foreach ($file in @("$fname.rsc", "$fname.backup")) {
+	    	Get-SFTPItem -SFTPSession $sftp -Path "/$file" -Destination $Path 
+	        Remove-SFTPItem -SFTPSession $sftp -Path "/$file" -Force
+                $TargetPath = @("$path\$file")
+                Write-Output $TargetPath
+            }
+
+            Remove-SFTPSession $sftp | Out-Null
         }
         else {
             Write-Verbose "Can't save backup"
@@ -507,7 +517,12 @@ $config = @{
 $config = $config.GetEnumerator()
 
 foreach ($conf in $config) {
+    "Do backup "+$conf.Name+' with IP '+$conf.value['ip']
+    
+    $file = Backup-Mikrotik -MHost $conf.value['ip'] -Login $conf.value['login'] -Pass $conf.value['pass'] -Path D:\backups\mikrotik\
+    Handle-BackupSet -SourceFile $file[0] -TargetPath "D:\backups\mikrotik" -RetainPolicy @{'daily' = @{'retainDays' = 2;'retainCopies' = 2}; 'weekly' = @{'retainDays' = 7;'retainCopies' = 4}; 'monthly' = @{'retainDays' = 62; 'retainCopies' = 2}}
+    Write-Host $file[0]
+    Handle-BackupSet -SourceFile $file[1] -TargetPath "D:\backups\mikrotik" -RetainPolicy @{'daily' = @{'retainDays' = 2;'retainCopies' = 2}; 'weekly' = @{'retainDays' = 7;'retainCopies' = 4}; 'monthly' = @{'retainDays' = 62; 'retainCopies' = 2}}
+    Write-Host $file[1]
 
-    $file = Backup-Mikrotik -MHost $conf.value['ip'] -Login $conf.value['login'] -Pass $conf.value['pass'] -Path C:\Scripts\
-    Handle-BackupSet -SourceFile $file -TargetPath $BackupSetsLocation -RetainPolicy @{'daily' = @{'retainDays' = 7;'retainCopies' = 7}; 'monthly' = @{'retainDays' = 62; 'retainCopies' = 2}}
 }
