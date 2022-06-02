@@ -58,7 +58,7 @@
     Process {
         # Перемещаем копии на сетевое хранилище
 
-        $dtarget = "$TargetPath\daily\$($tmpfile.basename)_daily_$($date.ToString('dd-MM'))$($tmpfile.extension)"
+        $dtarget = "$TargetPath\daily\$($tmpfile.basename)_daily_$($date.ToString('ddMMHHmmss'))$($tmpfile.extension)"
         
         if (($tmpfile.fullname -split ':\\')[0] -eq ($dtarget -split ':\\')[0] -and ($tmpfile.Extension -eq '.zip' -or !$compress)) {
             # Если в рамках одного диска
@@ -151,7 +151,7 @@
     }
 }
 
-
+# Бекап микротика
 function Backup-Mikrotik {
 
     [CmdletBinding()]
@@ -209,6 +209,7 @@ function Backup-Mikrotik {
 }
 
 
+# Бекап SQL
 function Backup-SQLDatabase {
     <#
     .Synopsis
@@ -222,7 +223,10 @@ function Backup-SQLDatabase {
     [string]$Database,
     [Parameter(Mandatory=$true, ValueFromPipeline=$true)]
     [string]$Path,
-    [string]$Server=$env:computername)
+    [string]$Server=$env:computername,
+    [string]$Type="Database",
+    [boolean]$Auto=$false
+    )
 
     Begin{
         ## Full + Log Backup of MS SQL Server databases/span>            
@@ -236,8 +240,8 @@ function Backup-SQLDatabase {
         if ((get-itemproperty 'HKLM:\SOFTWARE\Microsoft\Microsoft SQL Server').InstalledInstances -eq 'SQLEXPRESS') {
             $Server = $Server + "\SQLEXPRESS"
         }
-        Write-Verbose "Server name is $server"
-
+        Write-Verbose "Server name is $server" 
+        
         $srv = New-Object Microsoft.SqlServer.Management.Smo.Server $server;
         $srv.ConnectionContext.StatementTimeout = 0
         $date = Get-Date
@@ -248,21 +252,54 @@ function Backup-SQLDatabase {
         }
 
         # Удаляем копию, если она уже есть
-        $path = $Path + $database + '_full' + '.bak'
+        if ($type -eq "database") {
+            $path = $Path + $database + '_full' + '.bak'
+        } elseif ($type -eq "log") {
+            $path = $Path + $database + '_log' + '.trn'
+        }
         if (Test-Path $path) {
             rm $path
         }
     }
     Process{
         try {
-            
+
             Write-Verbose "Backing up to $path"
             $backup = New-Object ("Microsoft.SqlServer.Management.Smo.Backup")            
-            $backup.Action = "Database"            
-            $backup.Database = $database           
-            $backup.Devices.AddDevice($path, "File")                  
+            $backup.Action = $Type
+
+            # The script runs full and log backup automatically depends on whether full backup was run today or not.
+            if ($auto) {
+                Write-Verbose "Automatic mode was detected. Checking if database is in full mode to process full or log backup."
+
+                # Check if db is in full mode. If not switch to full backup? Or check the lastest full backup date?
+                $database_object = $srv.databases | ? {$_.name -eq $database}
+
+                if ($database_object.recoverymodel -ne 'simple') {
+                    # If yes check last database full backup. If yesterday do full backup then. If it was today do log backup then.
+                    if ($database_object.lastbackupdate.date -ne [datetime]::today) {
+                        $backup.Action = 'database'
+                        $path = ($path -replace '_log', '_full') -replace '\.trn', '.bak'
+                    } else {
+                        $backup.Action = 'log'
+                        $path = ($path -replace '_full', '_log') -replace '\.bak', '.trn'
+                    }
+                } else {
+                    Write-Warning "Database recovery model is Simple. Automatic mode is not possible. Switching to $type backup."
+                }
+            }
+
+            Write-Verbose "Backup path is $path. Backup action is $($backup.action)."
+            
+            # If we're backuping log we should truncate them.
+            if ($Type -eq "Database") {
+                $backup.LogTruncation = 'Truncate'
+            }
+
+            $backup.Database = $database          
+            $backup.Devices.AddDevice($path, "File")                 
             $backup.Incremental = 0
-            # Starting full backup process.
+            # Starting full backup process.               
             $backup.SqlBackup($srv);     
             #Backup-SqlDatabase -ServerInstance $server -BackupFile ($tempBackupPath + $database + '_daily_full_' + $date.ToString('dd-MM') + '.bak') -Database $database
             Write-Output $path

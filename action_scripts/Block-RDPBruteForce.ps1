@@ -8,6 +8,8 @@ $max_bad_attempts = 5 # Max bad logon attempts
 $firewall_rule_name="BlockRDPBruteForce"
 $local_port=-1 #0 is mean all protocols, 1-65535 - block this TCP and UDP ports
 $ip_address_list=@()
+$trusted_ips=@() # Example @('1.1.1.1', '2.2.2.2')
+
 
 if ($local_port -eq -1) {
     $local_port=(Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp\" -name PortNumber).PortNumber
@@ -44,7 +46,7 @@ if (Get-NetFirewallRule -DisplayName $firewall_rule_name -ErrorAction SilentlyCo
 # Populate new IPs for blocking
 foreach ($ip in $get_ip) { 
 
-    if ($ip_address_list -notcontains $ip) {
+    if ($ip_address_list -notcontains $ip -and $trusted_ips -notcontains $ip) {
      
         Write-Host "Adding $ip to RDP block list."
         if (($new_ip_address_list | Measure-Object).count -ge 10000) {
