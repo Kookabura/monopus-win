@@ -1,9 +1,9 @@
 [CmdletBinding()]
 Param(
-	[Parameter(Mandatory=$true)][string]$SqlServer = "GRUNT",
-	[Parameter(Mandatory=$true)][string]$SqlDatabase = "Sklad_KN",
-	[Parameter(Mandatory=$true)][string]$SqlTable = "CUZK_extPAR",
-	[Parameter(Mandatory=$true)][string]$SqlSearchParameter = "VYMERA_PARCELY",
+	[Parameter(Mandatory=$true)][string]$SqlServer,
+	[Parameter(Mandatory=$true)][string]$SqlDatabase,
+	[Parameter(Mandatory=$true)][string]$SqlTable,
+	[Parameter(Mandatory=$true)][string]$SqlSearchParameter,
 	[Parameter()][int32]$C = 0
 )
 
