@@ -1,4 +1,4 @@
-﻿function Handle-BackupSet {
+function Handle-BackupSet {
    <#
     .Synopsis
         Handle backup sets
@@ -24,7 +24,8 @@
         }
     },
     [string]$LogFile,
-    [boolean]$Compress = $true
+    [boolean]$Compress = $true,
+    [boolean]$Encrypt = $true # шифрование включено (работает только при копирповании на другой диск)
     )
 
     Begin {
@@ -67,19 +68,23 @@
             # Если диски разные
             # TO DO Сжимать до копирования. Так быстрее должно быть.
             if ($compress) {
-
-                $dtarget = "$dtarget.zip"
-
-                Add-Type -assembly 'System.IO.Compression'
-                Add-Type -assembly 'System.IO.Compression.FileSystem'
-                
-                [System.IO.Compression.ZipArchive]$ZipFile = [System.IO.Compression.ZipFile]::Open($dtarget, ([System.IO.Compression.ZipArchiveMode]::Create))
-                [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($ZipFile, $tmpfile.fullname, (Split-Path $tmpfile.fullname -Leaf)) | out-null
-                $ZipFile.Dispose()
+				
+				$dtarget = "$dtarget.zip"
+				
+				if ($Encrypt) {
+					$Password = "P@55word"
+					Crypto -InputFile $tmpfile.fullname -OutputFile $dtarget -Password $Password
+				} else {
+					Add-Type -assembly 'System.IO.Compression'
+					Add-Type -assembly 'System.IO.Compression.FileSystem'
+					
+					[System.IO.Compression.ZipArchive]$ZipFile = [System.IO.Compression.ZipFile]::Open($dtarget, ([System.IO.Compression.ZipArchiveMode]::Create))
+					[System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($ZipFile, $tmpfile.fullname, (Split-Path $tmpfile.fullname -Leaf)) | out-null
+					$ZipFile.Dispose()
+				}
             } else {
                 cp $tmpfile.fullname $dtarget
             }
-            
         }
 
         # Откладываем копию в еженедельный архив
@@ -149,6 +154,101 @@
 
     End {
     }
+}
+
+
+#функция шифрования
+function Crypto
+{
+	[CmdletBinding()]
+	param (
+		[String]$InputFile,
+		[String]$OutputFile,
+		[String]$Password
+		#[bool]$Compress
+	)
+
+	$InputStream = New-Object IO.FileStream($InputFile, [IO.FileMode]::Open, [IO.FileAccess]::Read)
+	$OutputStream = New-Object IO.FileStream($OutputFile, [IO.FileMode]::Create, [IO.FileAccess]::Write)
+
+	$Salt = New-Object Byte[](32)
+	$Prng = New-Object System.Security.Cryptography.RNGCryptoServiceProvider
+	$Prng.GetBytes($Salt)
+
+	# Derive random bytes using PBKDF2 from Salt and Password
+	$PBKDF2 = New-Object System.Security.Cryptography.Rfc2898DeriveBytes($Password, $Salt)
+
+	# Get our AES key, iv and hmac key from the PBKDF2 stream
+	$AESKey  = $PBKDF2.GetBytes(32)
+	$AESIV   = $PBKDF2.GetBytes(16)
+
+	# Setup our encryptor
+	$AES = New-Object Security.Cryptography.AesManaged
+	$Enc = $AES.CreateEncryptor($AESKey, $AESIV)
+
+	# Write our Salt now, then append the encrypted data
+	$OutputStream.Write($Salt, 0, $Salt.Length)
+
+	$CryptoStream = New-Object System.Security.Cryptography.CryptoStream($OutputStream, $Enc, [System.Security.Cryptography.CryptoStreamMode]::Write)
+	$GzipStream = New-Object System.IO.Compression.GZipStream($CryptoStream, [IO.Compression.CompressionMode]::Compress)
+
+	$InputStream.CopyTo($GzipStream)
+	
+	$InputStream.Flush()
+	$GzipStream.Flush()
+	$OutputStream.Flush()
+	$InputStream.Close()
+	$GzipStream.Close()
+	$OutputStream.Close()
+	#$CryptoStream.Dispose()
+}
+
+
+# функция расшифровки
+function DeCrypto
+{
+	[CmdletBinding()]
+	param (
+		[String]$InputFile,
+		[String]$OutputFile,
+		[String]$Password
+	)
+
+	$InputStream = New-Object IO.FileStream($InputFile, [IO.FileMode]::Open, [IO.FileAccess]::Read)
+	$OutputStream = New-Object IO.FileStream($OutputFile, [IO.FileMode]::Create, [IO.FileAccess]::Write)
+
+	# Read the Salt
+	$Salt = New-Object Byte[](32)
+	$BytesRead = $InputStream.Read($Salt, 0, $Salt.Length)
+	if ( $BytesRead -ne $Salt.Length )
+	{
+		Write-Host 'Failed to read Salt from file'
+		exit
+	}
+
+	# Generate PBKDF2 from Salt and Password
+	$PBKDF2 = New-Object System.Security.Cryptography.Rfc2898DeriveBytes($Password, $Salt)
+
+	# Get our AES key, iv and hmac key from the PBKDF2 stream
+	$AESKey  = $PBKDF2.GetBytes(32)
+	$AESIV   = $PBKDF2.GetBytes(16)
+
+	# Setup our decryptor
+	$AES = New-Object Security.Cryptography.AesManaged
+	$Decryptor = $AES.CreateDecryptor($AESKey, $AESIV)
+
+	$CryptoStream = New-Object System.Security.Cryptography.CryptoStream($InputStream, $Decryptor, [System.Security.Cryptography.CryptoStreamMode]::Read)
+	$GzipStream = New-Object System.IO.Compression.GZipStream($CryptoStream, [IO.Compression.CompressionMode]::Decompress)
+	
+	$GzipStream.CopyTo($OutputStream)
+	
+	$InputStream.Flush()
+	$GzipStream.Flush()
+	$OutputStream.Flush()
+	$InputStream.Close()
+	$GzipStream.Close()
+	$OutputStream.Close()
+	#$OutputStream.Dispose()
 }
 
 # Бекап микротика
@@ -413,8 +513,8 @@ function Remove-ShadowLink {
 
 
 # Общие параметры для всех заданий бекапа
-$BackupTempLocation = 'C:\Arhiv\Backups' # временное хранилище копий
-$BackupSetsLocation = 'C:\Arhiv\Backups' # хранилище бекапов
+$BackupTempLocation = 'C:\TMP\Arhiv\Backups' # временное хранилище копий
+$BackupSetsLocation = '\\tsclient\G\Arhiv' # хранилище бекапов
 
 ###### -------------------------------------------------------------------
 # Бекап баз данных SQL
@@ -437,12 +537,11 @@ foreach ($db in $databases) {
 
 ###### ------------------------------------------------------------------
 # Бекап папок
-$folders = @('C:\1CBases\Base',
+$folders = @('C:\Users\aseregin',
+			'C:\1CBases\Base',
             'C:\1CBases\Base2',
             'C:\1CBases\Base3',
-            'C:\1CBases\Base4',
-            'C:\1CBases\Base5',
-            'C:\1CBases\Base6')
+            'C:\1CBases\Base4')
 
 # Создаем теневые копии для дисков, на которых находятся папки
 Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Starting folders backup job..."
@@ -511,3 +610,6 @@ foreach ($conf in $config) {
     $file = Backup-Mikrotik -MHost $conf.value['ip'] -Login $conf.value['login'] -Pass $conf.value['pass'] -Path C:\Scripts\
     Handle-BackupSet -SourceFile $file -TargetPath $BackupSetsLocation -RetainPolicy @{'daily' = @{'retainDays' = 7;'retainCopies' = 7}; 'monthly' = @{'retainDays' = 62; 'retainCopies' = 2}}
 }
+
+# Пример расшифровки бэкапа из сетевого хранилища
+DeCrypto -InputFile \\tsclient\G\Arhiv\Desktop_daily_0706132446.zip.zip -OutputFile C:\TMP\Desktop_daily_0706132446.zip -Password "P@55word"
