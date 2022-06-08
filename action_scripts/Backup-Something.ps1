@@ -1,31 +1,22 @@
 function Handle-BackupSet {
-   <#
-    .Synopsis
-        Handle backup sets
-    .EXAMPLE
-        Handle-Copy C:\Temp\Temp.zip E:\backup
-    #> 
-
     [CmdletBinding()]
-
     Param (
-    [Parameter(Mandatory=$true, ValueFromPipeline=$true)]
-    [string]$SourceFile,
-    [Parameter(Mandatory=$true)]
-    [string]$TargetPath,
-    [hashtable]$RetainPolicy = @{
-        'daily' = @{
-            'retainDays' = 14;
-            'retainCopies' = 14
-        };
-        'monthly' = @{
-            'retainDays' = 365;
-            'retainCopies' = 12
-        }
-    },
-    [string]$LogFile,
-    [boolean]$Compress = $true,
-    [boolean]$Encrypt = $true # шифрование включено (работает только при копирповании на другой диск)
+		[Parameter(Mandatory=$true, ValueFromPipeline=$true)][string]$SourceFile,
+		[Parameter(Mandatory=$true)][string]$TargetPath,
+		[hashtable]$RetainPolicy = @{
+			'daily' = @{
+				'retainDays' = 14;
+				'retainCopies' = 14
+			};
+			'monthly' = @{
+				'retainDays' = 365;
+				'retainCopies' = 12
+			}
+		},
+		[string]$LogFile,
+		[string]$Password,
+		[boolean]$Compress = $true,
+		[boolean]$Encrypt = $true # шифрование включено (работает только при копирповании на другой диск)
     )
 
     Begin {
@@ -72,8 +63,7 @@ function Handle-BackupSet {
 				$dtarget = "$dtarget.zip"
 				
 				if ($Encrypt) {
-					$Password = "P@55word"
-					Crypto -InputFile $tmpfile.fullname -OutputFile $dtarget -Password $Password
+					EncryptGzip-File -InputFile $tmpfile.fullname -OutputFile $dtarget -Password $Password
 				} else {
 					Add-Type -assembly 'System.IO.Compression'
 					Add-Type -assembly 'System.IO.Compression.FileSystem'
@@ -158,14 +148,13 @@ function Handle-BackupSet {
 
 
 #функция шифрования
-function Crypto
+function EncryptGzip-File
 {
 	[CmdletBinding()]
 	param (
-		[String]$InputFile,
-		[String]$OutputFile,
+		[Parameter(Mandatory=$true)][String]$InputFile,
+		[Parameter(Mandatory=$true)][String]$OutputFile,
 		[String]$Password
-		#[bool]$Compress
 	)
 
 	$InputStream = New-Object IO.FileStream($InputFile, [IO.FileMode]::Open, [IO.FileAccess]::Read)
@@ -200,17 +189,16 @@ function Crypto
 	$InputStream.Close()
 	$GzipStream.Close()
 	$OutputStream.Close()
-	#$CryptoStream.Dispose()
 }
 
 
 # функция расшифровки
-function DeCrypto
+function DecryptGzip-File
 {
 	[CmdletBinding()]
 	param (
-		[String]$InputFile,
-		[String]$OutputFile,
+		[Parameter(Mandatory=$true)][String]$InputFile,
+		[Parameter(Mandatory=$true)][String]$OutputFile,
 		[String]$Password
 	)
 
@@ -248,23 +236,18 @@ function DeCrypto
 	$InputStream.Close()
 	$GzipStream.Close()
 	$OutputStream.Close()
-	#$OutputStream.Dispose()
 }
 
 # Бекап микротика
 function Backup-Mikrotik {
-
     [CmdletBinding()]
-
     Param (
-    [Parameter(Mandatory=$true, ValueFromPipeline=$true)]
-    [string]$MHost,
-    [string]$Login = 'admin',
-    [Parameter(Mandatory=$true, ValueFromPipeline=$true)]
-    [string]$Pass,
-    [Parameter(Mandatory=$true, ValueFromPipeline=$true)]
-    [string]$Path,
-    [string]$Prefix)
+		[Parameter(Mandatory=$true, ValueFromPipeline=$true)][string]$MHost,
+		[string]$Login = 'admin',
+		[Parameter(Mandatory=$true, ValueFromPipeline=$true)][string]$Pass,
+		[Parameter(Mandatory=$true, ValueFromPipeline=$true)][string]$Path,
+		[string]$Prefix
+	)
 
     Begin{
         
@@ -311,13 +294,7 @@ function Backup-Mikrotik {
 
 # Бекап SQL
 function Backup-SQLDatabase {
-    <#
-    .Synopsis
-        Backups SQL database. Script works with SQL 2008 and higher. Requires dbadmin privileges on target database.
-    #>
-
     [CmdletBinding()]
-
     Param (
     [Parameter(Mandatory=$true, ValueFromPipeline=$true)]
     [string]$Database,
@@ -413,17 +390,10 @@ function Backup-SQLDatabase {
 
 
 function Backup-Folder {
-    <#
-    .Synopsis
-        Zip folder
-    #>
-
     [CmdletBinding(SupportsShouldProcess=$True)]
     Param(
-        [Parameter(Mandatory=$true)]
-        [string]$Folder,
-        [Parameter(Mandatory=$true)]
-        [string]$BackupPath,
+        [Parameter(Mandatory=$true)][string]$Folder,
+        [Parameter(Mandatory=$true)][string]$BackupPath,
         [string]$Name
     )
 
@@ -512,104 +482,124 @@ function Remove-ShadowLink {
 }
 
 
-# Общие параметры для всех заданий бекапа
-$BackupTempLocation = 'C:\TMP\Arhiv\Backups' # временное хранилище копий
-$BackupSetsLocation = '\\tsclient\G\Arhiv' # хранилище бекапов
+#####===== Бекап папок =====#####
+function Execute-BackupFolders
+{
+    [CmdletBinding()]
+    param (
+		[Parameter(Mandatory=$true, ValueFromPipeline=$true)][string[]]$Folders, # перечисление папок для бекапа
+		[Parameter(Mandatory=$true, ValueFromPipeline=$true)][string]$BackupTempLocation, # временное хранилище копий
+		[Parameter(Mandatory=$true)][string]$BackupSetsLocation, # хранилище бекапов
+		[string]$LogFile,
+		[string]$Password,
+		[boolean]$Compress,
+		[boolean]$Encrypt
+    )
+	
+	# Создаем теневые копии для дисков, на которых находятся папки
+	Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Starting folders backup job..."
+	$volumes = @()
+	$shadows = @{}
+	foreach ($folder in $Folders) {
+		# Получаем диск папки
+		$volume = Split-Path $folder -Qualifier
+		if ($volumes -notcontains $volume) {
+			Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Creating shadow copy for volume $volume..."
+			$shadow = New-ShadowLink -Drive $volume
+			
+			$shadowpath = $(Join-Path $volume 'shadow')
+			Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Creating SymLink to shadowcopy at $shadowpath"
+			$target = "$($shadow.DeviceObject)\";
+			Invoke-Expression -Command "cmd /c mklink /d '$shadowpath' '$target'" | Out-Null
 
-###### -------------------------------------------------------------------
-# Бекап баз данных SQL
-$databases = @('lera-money')
+			$shadows[$volume] = $shadow
+			$volumes += $volume
+		}
+	}
 
+	# Бекапим данные из теневой копии
+	foreach ($folder in $Folders) {
+		Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Backing up $folder to temp location $BackupTempLocation"
+		if (!(Test-Path $BackupTempLocation)) {
+			mkdir $BackupTempLocation
+		}
+		try {
+			# Бекапим папку
+			$file = Backup-Folder -Folder (Join-Path $shadowpath (Split-Path $folder -NoQualifier)) -BackupPath $BackupTempLocation
 
-foreach ($db in $databases) {
-    Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Backing up $db to temp location..."
-    if (!(Test-Path $BackupTempLocation)) {
-        mkdir $BackupTempLocation
-    }
-    $file = Backup-SQLDatabase -Database $db -Path $BackupTempLocation
+			#Перемещаем бекап в хранилище
+			Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Moving to backup set location and hadling copies count"
+			Handle-BackupSet -SourceFile $file -TargetPath $BackupSetsLocation -RetainPolicy @{'daily' = @{'retainDays' = 7;'retainCopies' = 7}; 'monthly' = @{'retainDays' = 366; 'retainCopies' = 12}} -LogFile $LogFile -Password $Password -Compress $Compress -Encrypt $Encrypt
+			Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Backup is finished successfully."
+		} catch {
+			Write-Host ((get-date -format 'dd.MM.yy HH:mm:ss: Backup folder $folder is failed [line: ') + $_.InvocationInfo.ScriptLineNumber + '] ' + ' - ' + $_) -ForegroundColor Red
+		}
+	}
 
-    Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Moving to backup set location and hadling copies count..."
-    Handle-BackupSet -SourceFile $file -TargetPath $BackupSetsLocation -RetainPolicy @{'daily' = @{'retainDays' = 7;'retainCopies' = 7}; 'monthly' = @{'retainDays' = 366; 'retainCopies' = 12}}
-
-    Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Backup is finished."
+	# Удаляем теневые копии
+	foreach ($volume in $shadows.keys) {
+		Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Removing shadow copy for volume $volume"
+		Remove-ShadowLink $shadows[$volume]
+		cmd /c rmdir (Join-Path $volume 'shadow')
+	}
 }
 
+#####===== Бекап баз данных SQL =====#####
+function Execute-BackupSQL
+{
+	[CmdletBinding()]
+    param (
+		[Parameter(Mandatory=$true, ValueFromPipeline=$true)][string[]]$Databases, # перечисление БД
+		[Parameter(Mandatory=$true, ValueFromPipeline=$true)][string]$BackupTempLocation, # временное хранилище копий
+		[Parameter(Mandatory=$true)][string]$BackupSetsLocation, # хранилище бекапов
+		[string]$LogFile,
+		[string]$Password,
+		[boolean]$Compress,
+		[boolean]$Encrypt
+    )
 
-###### ------------------------------------------------------------------
-# Бекап папок
-$folders = @('C:\Users\aseregin',
-			'C:\1CBases\Base',
-            'C:\1CBases\Base2',
-            'C:\1CBases\Base3',
-            'C:\1CBases\Base4')
+	foreach ($db in $Databases) {
+		Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Backing up $db to temp location..."
+		if (!(Test-Path $BackupTempLocation)) {
+			mkdir $BackupTempLocation
+		}
+		$file = Backup-SQLDatabase -Database $db -Path $BackupTempLocation
 
-# Создаем теневые копии для дисков, на которых находятся папки
-Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Starting folders backup job..."
-$volumes = @()
-$shadows = @{}
-foreach ($folder in $folders) {
-    # Получаем диск папки
-    $volume = Split-Path $folder -Qualifier
-    if ($volumes -notcontains $volume) {
-        Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Creating shadow copy for volume $volume..."
-        $shadow = New-ShadowLink -Drive $volume
-        
-        
-        $shadowpath = $(Join-Path $volume 'shadow')
-        Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Creating SymLink to shadowcopy at $shadowpath"
-        $target = "$($shadow.DeviceObject)\";
-        Invoke-Expression -Command "cmd /c mklink /d '$shadowpath' '$target'" | Out-Null
+		Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Moving to backup set location and hadling copies count..."
+		Handle-BackupSet -SourceFile $file -TargetPath $BackupSetsLocation -RetainPolicy @{'daily' = @{'retainDays' = 7;'retainCopies' = 7}; 'monthly' = @{'retainDays' = 366; 'retainCopies' = 12}}
 
-        $shadows[$volume] = $shadow
-        $volumes += $volume
-    }
+		Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Backup is finished."
+	}
 }
 
-# Бекапим данные из теневой копии
-foreach ($folder in $folders) {
-    Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Backing up $folder to temp location $BackupTempLocation"
-    if (!(Test-Path $BackupTempLocation)) {
-        mkdir $BackupTempLocation
-    }
-    try {
+#####===== Бекап микротика =====##### доделать
+function Execute-BackupMikrotik
+{
+	[CmdletBinding()]
+    param (
+		[Parameter(Mandatory=$true, ValueFromPipeline=$true)][string]$MHost, # ip
+		[Parameter(Mandatory=$true, ValueFromPipeline=$true)][string]$Login, # Login для микротика
+		[Parameter(Mandatory=$true, ValueFromPipeline=$true)][string]$Pass, # пароль для микротика
+		[Parameter(Mandatory=$true, ValueFromPipeline=$true)][string]$BackupTempLocation, # временное хранилище копий
+		[Parameter(Mandatory=$true)][string]$BackupSetsLocation, # хранилище бекапов
+		[string]$LogFile,
+		[string]$Password,
+		[boolean]$Compress,
+		[boolean]$Encrypt
+    )
 
-        # Бекапим папку
-        $file = Backup-Folder -Folder (Join-Path $shadowpath (Split-Path $folder -NoQualifier)) -BackupPath $BackupTempLocation
-
-        #Перемещаем бекап к хранилище
-        Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Moving to backup set location and hadling copies count"
-        Handle-BackupSet -SourceFile $file -TargetPath $BackupSetsLocation -RetainPolicy @{'daily' = @{'retainDays' = 7;'retainCopies' = 7}; 'monthly' = @{'retainDays' = 366; 'retainCopies' = 12}}
-        Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Backup is finished successfully."
-    } catch {
-        Write-Host ((get-date -format 'dd.MM.yy HH:mm:ss: Backup folder $folder is failed [line: ') + $_.InvocationInfo.ScriptLineNumber + '] ' + ' - ' + $_) -ForegroundColor Red
-    }
-
+	$file = Backup-Mikrotik -MHost $MHost -Login $Login -Pass $Pass -Path $BackupTempLocation
+	Handle-BackupSet -SourceFile $file -TargetPath $BackupSetsLocation -RetainPolicy @{'daily' = @{'retainDays' = 7;'retainCopies' = 7}; 'monthly' = @{'retainDays' = 62; 'retainCopies' = 2}}
 }
 
-# Удаляем теневые копии
-foreach ($volume in $shadows.keys) {
-    Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Removing shadow copy for volume $volume"
-    Remove-ShadowLink $shadows[$volume]
-    cmd /c rmdir (Join-Path $volume 'shadow')
-}
+#####===== Бекап папок (пример) =====#####
+#Execute-BackupFolders -Folders 'C:\Users\aseregin\Desktop', 'C:\Users\aseregin\Documents', 'C:\Users\aseregin\Downloads' -BackupTempLocation C:\TMP -BackupSetsLocation \\tsclient\G\Archiv -Password "P@55word"
 
+#####===== Бекап баз данных SQL (пример) =====#####
+#Execute-BackupSQL -Databases 'bd1', 'bd2' -BackupTempLocation C:\TMP -BackupSetsLocation \\tsclient\G\Archiv -Password "P@55word"
 
-##### -------------------------------------------------------------------------------
-# Backup mikrotik configs
-$config = @{
-    'dc' = @{
-        'ip' = '192.168.88.1';
-        'login' = 'login';
-        'pass' = 'pass'
-     };
-}
-$config = $config.GetEnumerator()
+#####===== Бекап микротика (пример) =====#####
+#Execute-BackupMikrotik -MHost '192.168.88.1' -Login 'login' -Pass 'pass' -BackupTempLocation C:\TMP -BackupSetsLocation \\tsclient\G\Archiv -Password "P@55word"
 
-foreach ($conf in $config) {
-
-    $file = Backup-Mikrotik -MHost $conf.value['ip'] -Login $conf.value['login'] -Pass $conf.value['pass'] -Path C:\Scripts\
-    Handle-BackupSet -SourceFile $file -TargetPath $BackupSetsLocation -RetainPolicy @{'daily' = @{'retainDays' = 7;'retainCopies' = 7}; 'monthly' = @{'retainDays' = 62; 'retainCopies' = 2}}
-}
-
-# Пример расшифровки бэкапа из сетевого хранилища
-DeCrypto -InputFile \\tsclient\G\Arhiv\Desktop_daily_0706132446.zip.zip -OutputFile C:\TMP\Desktop_daily_0706132446.zip -Password "P@55word"
+#####===== Расшифровка зашифрованного бекапа (пример) =====#####
+#DecryptGzip-File -InputFile \\tsclient\G\Arhiv\Desktop_daily_0706132446.zip.zip -OutputFile C:\TMP\Desktop_daily_0706132446.zip -Password "P@55word"
