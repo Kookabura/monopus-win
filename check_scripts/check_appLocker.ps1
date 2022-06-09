@@ -1,6 +1,5 @@
 [CmdletBinding()]
 $t = $host.ui.RawUI.ForegroundColor
-$states_text = @('ok', 'warning', 'critical', 'unknown')
 $state_colors = @('Green', 'Yellow', 'Red', 'DarkGray')
 $state = 0
 $err = ""
@@ -38,7 +37,7 @@ catch
 	$errmsg = "err"
 }
 	
-$output = "check_status.$($states_text[$state])::condition==$errmsg | errlvl=$state;;;"
+$output = "check_applocker.$errmsg | errlvl=$state;;;"
 $host.ui.RawUI.ForegroundColor = $($state_colors[$state])
 Write-Output $output
 $host.ui.RawUI.ForegroundColor = $t
