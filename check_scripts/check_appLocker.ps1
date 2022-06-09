@@ -35,6 +35,7 @@ catch
 { 
 	Write-Host $_ -ForegroundColor Red
 	$state = 3
+	$errmsg = "err"
 }
 	
 $output = "check_status.$($states_text[$state])::condition==$errmsg | errlvl=$state;;;"
