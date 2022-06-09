@@ -1,28 +1,43 @@
 [CmdletBinding()]
-Param
-(
-	[Parameter()][string[]] $adminMembers = @("$env:computername\CloudAdmin"),
-	[Parameter()][int] $updateDays = 5
-)
 $t = $host.ui.RawUI.ForegroundColor
-$states_text = @('ok', 'critical', 'unknown')
-$state_colors = @('Green', 'Red', 'DarkGray')
+$states_text = @('ok', 'warning', 'critical', 'unknown')
+$state_colors = @('Green', 'Yellow', 'Red', 'DarkGray')
 $state = 0
+$err = ""
+$errmsg = "ok"
 
-	# включен AppLocker
-	try {
-		$applocker = Get-AppLockerPolicy -Effective
-		if($applocker.RuleCollections.count -eq 0) {$state = 1}
-		$svc = Get-Service AppIDSvc
-		if($svc.Status -ne 'Running' -or $svc.StartType -ne 'Automatic') {$state = 1}
+try {
+	$applocker = Get-AppLockerPolicy -Effective
+	
+	if($applocker.RuleCollections.count -eq 0)
+	{
+		$state = 1
+		$err += "_rules_empty"
 	}
-	catch
-	{ 
-		Write-Host $_ -ForegroundColor Red
-		$state = 2
+
+	$svc = Get-Service AppIDSvc
+	
+	if($svc.StartType -ne 'Automatic')
+	{
+		$state = 1
+		$err += "_svc_start_type"
 	}
 	
-$output = "check_status.$($states_text[$state]) | Status=$($svc.Status);;; | RuleCollections=$($applocker.RuleCollections.count);;;"
+	if($svc.Status -ne 'Running')
+	{
+		$state = 2
+		$err += "_svc_no_runing"
+	}
+	
+	if ($err -ne "") {$errmsg = "err" + $err}
+}
+catch
+{ 
+	Write-Host $_ -ForegroundColor Red
+	$state = 3
+}
+	
+$output = "check_status.$($states_text[$state]) | check_applocker=$($errmsg);;;"
 $host.ui.RawUI.ForegroundColor = $($state_colors[$state])
 Write-Output $output
 $host.ui.RawUI.ForegroundColor = $t
