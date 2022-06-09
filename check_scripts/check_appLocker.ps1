@@ -37,7 +37,7 @@ catch
 	$state = 3
 }
 	
-$output = "check_status.$($states_text[$state]) | check_applocker=$($errmsg);;;"
+$output = "check_status.$($states_text[$state])::condition==$errmsg | errlvl=$state;;;"
 $host.ui.RawUI.ForegroundColor = $($state_colors[$state])
 Write-Output $output
 $host.ui.RawUI.ForegroundColor = $t
