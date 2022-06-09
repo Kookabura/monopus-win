@@ -60,7 +60,7 @@ catch {
 	$errmsg = "err"
 }
 	
-$output = "check_status.$($states_text[$state])::condition==$errmsg | errlvl=$state;;;"
+$output = "check_policy_password.$errmsg | errlvl=$state;;;"
 $host.ui.RawUI.ForegroundColor = $($state_colors[$state])
 Write-Output $output
 $host.ui.RawUI.ForegroundColor = $t
