@@ -19,8 +19,7 @@ try
 {
 	$SqlConnection.Open()
 	$SqlCmd = $SqlConnection.CreateCommand()
-	$SqlCmd.CommandText = "SELECT Count(*) FROM [$SqlDatabase].[dbo].[$SqlTable] WHERE $SqlSearchParameter = 0 and CONVERT (date, ImportDate) like CONVERT (date, SYSDATETIME())"
-	#$SqlCmd.CommandText = "SELECT Count(*) FROM [$SqlDatabase].[dbo].[$SqlTable] WHERE $SqlSearchParameter = 0 and CONVERT (date, ImportDate) like CONVERT (date, '2022-01-15')"
+	$SqlCmd.CommandText = "SELECT Count(*) FROM [$SqlDatabase].[dbo].[$SqlTable] WHERE ((SqlSearchParameter IS NULL) OR (SqlSearchParameter = 0)) AND (CONVERT (date, ImportDate) like CONVERT (date, SYSDATETIME()))"
 	$objReader = $SqlCmd.ExecuteReader()
 
 	while ($objReader.read())
