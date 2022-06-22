@@ -32,15 +32,7 @@ try
 				$errcount++
 				$errdetails += "Rules for '" + $rule.RuleCollectionType + "' off. "
 			}
-			if (!($rule.Empty))
-			{
-				$errcount++
-				$errdetails += "Rules for '" + $rule.RuleCollectionType + "' are empty. "
-			}
-		}
-		else
-		{
-			if (!($rule.Empty))
+			if ($rule.Empty)
 			{
 				$errcount++
 				$errdetails += "Rules for '" + $rule.RuleCollectionType + "' are empty. "
