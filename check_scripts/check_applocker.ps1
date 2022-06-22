@@ -1,9 +1,9 @@
 [CmdletBinding()]
 $t = $host.ui.RawUI.ForegroundColor
+$errmsg = @('ok', 'warning', 'critical', 'unknown')
 $state_colors = @('Green', 'Yellow', 'Red', 'DarkGray')
 $state = 0
 $errcount = 0
-$errmsg = "ok"
 $errdetails = "Error: "
 
 try
@@ -50,7 +50,6 @@ try
 	
 	if ($errcount -gt 0)
 	{
-		$errmsg = "err"
 		$state = 2
 	}
 	else {$errdetails = "All good."}
@@ -59,10 +58,9 @@ catch
 { 
 	Write-Host $_ -ForegroundColor Red
 	$state = 3
-	$errmsg = "err"
 }
 	
-$output = "check_applocker.$errmsg::errdetails==$errdetails | errcount=$errcount;;;"
+$output = "check_applocker.$($errmsg[$state])::errdetails==$errdetails | errcount=$errcount;;;"
 $host.ui.RawUI.ForegroundColor = $($state_colors[$state])
 Write-Output $output
 $host.ui.RawUI.ForegroundColor = $t
