@@ -15,8 +15,8 @@ function Handle-BackupSet {
 		},
 		[string]$LogFile,
 		[string]$Password,
-		[boolean]$Compress = $true,
-		[boolean]$Encrypt = $true # шифрование включено (работает только при копирповании на другой диск)
+		[boolean]$Compress = $false,
+		[boolean]$Encrypt = $false
     )
 
     Begin {
@@ -63,6 +63,7 @@ function Handle-BackupSet {
 				$dtarget = "$dtarget.zip"
 				
 				if ($Encrypt) {
+					if ($Password.Length -eq 0) {Write-Warning "Encryption is carried out without a password!"}
 					EncryptGzip-File -InputFile $tmpfile.fullname -OutputFile $dtarget -Password $Password
 				} else {
 					Add-Type -assembly 'System.IO.Compression'
@@ -329,7 +330,7 @@ function Backup-SQLDatabase {
         }
 
         # Удаляем копию, если она уже есть
-        if ($type -eq "database") {
+        if ($type -eq "Database") {
             $path = $Path + $database + '_full' + '.bak'
         } elseif ($type -eq "log") {
             $path = $Path + $database + '_log' + '.trn'
@@ -566,7 +567,7 @@ function Execute-BackupSQL
 		$file = Backup-SQLDatabase -Database $db -Path $BackupTempLocation
 
 		Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Moving to backup set location and hadling copies count..."
-		Handle-BackupSet -SourceFile $file -TargetPath $BackupSetsLocation -RetainPolicy @{'daily' = @{'retainDays' = 7;'retainCopies' = 7}; 'monthly' = @{'retainDays' = 366; 'retainCopies' = 12}}
+		Handle-BackupSet -SourceFile $file -TargetPath $BackupSetsLocation -RetainPolicy @{'daily' = @{'retainDays' = 7;'retainCopies' = 7}; 'monthly' = @{'retainDays' = 366; 'retainCopies' = 12}} -LogFile $LogFile -Password $Password -Compress $Compress -Encrypt $Encrypt
 
 		Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Backup is finished."
 	}
@@ -589,7 +590,7 @@ function Execute-BackupMikrotik
     )
 
 	$file = Backup-Mikrotik -MHost $MHost -Login $Login -Pass $Pass -Path $BackupTempLocation
-	Handle-BackupSet -SourceFile $file -TargetPath $BackupSetsLocation -RetainPolicy @{'daily' = @{'retainDays' = 7;'retainCopies' = 7}; 'monthly' = @{'retainDays' = 62; 'retainCopies' = 2}}
+	Handle-BackupSet -SourceFile $file -TargetPath $BackupSetsLocation -RetainPolicy @{'daily' = @{'retainDays' = 7;'retainCopies' = 7}; 'monthly' = @{'retainDays' = 62; 'retainCopies' = 2}} -LogFile $LogFile -Password $Password -Compress $Compress -Encrypt $Encrypt
 }
 
 #####===== Бекап папок (пример) =====#####
