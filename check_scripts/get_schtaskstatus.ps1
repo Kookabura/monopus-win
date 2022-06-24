@@ -27,7 +27,7 @@ Begin {
 Process {
     foreach($job in $JobName){
         if ($task = Get-ScheduledTaskInfo $job -ErrorAction SilentlyContinue) {
-            if (!($task.LastTaskResult)) { 
+            if ($task.LastTaskResult -ne "0") { 
                 $state += 2
                 $jobs['bad'] += $job
             } else {
