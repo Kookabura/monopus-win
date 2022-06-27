@@ -4,21 +4,23 @@ $errmsg = @('ok', 'warning', 'critical', 'unknown')
 $state_colors = @('Green', 'Yellow', 'Red', 'DarkGray')
 $state = 0
 $errcount = 0
-$errdetails = "Error: "
+$detailed_status = ""
+$assembly_status = @()
+
 
 try
 {
 	$svc = Get-Service AppIDSvc
 	
-	if($svc.StartType -ne "Automatic")
-	{
-		$errcount++
-		$errdetails += "Incorrect service start status. "
-	}
 	if($svc.Status -ne "Running")
 	{
 		$errcount++
-		$errdetails += "Service not started. "
+		$assembly_status += "svc_not_started"
+	}
+	if($svc.StartType -ne "Automatic")
+	{
+		$errcount++
+		$assembly_status += "svc_start_status"
 	}
 	
 	$rulecollections = (Get-AppLockerPolicy -Effective).rulecollections | select -Property *
@@ -30,12 +32,12 @@ try
 			if ($rule.EnforcementMode -ne "Enabled")
 			{
 				$errcount++
-				$errdetails += "Rules for '" + $rule.RuleCollectionType + "' off. "
+				$assembly_status += "rules_off"
 			}
 			if ($rule.Empty)
 			{
 				$errcount++
-				$errdetails += "Rules for '" + $rule.RuleCollectionType + "' are empty. "
+				$assembly_status += "rules_empty"
 			}
 		}
 	}
@@ -43,8 +45,15 @@ try
 	if ($errcount -gt 0)
 	{
 		$state = 2
+		
+		foreach ($s in $assembly_status)
+		{
+			if (!($detailed_status -like "*$s*"))
+			{
+				$detailed_status = [string]::Join(".",$detailed_status,$s)
+			}
+		}
 	}
-	else {$errdetails = "All good."}
 }
 catch
 { 
@@ -52,7 +61,7 @@ catch
 	$state = 3
 }
 	
-$output = "check_applocker.$($errmsg[$state])::errdetails==$errdetails | errcount=$errcount;;;"
+$output = "check_applocker.$($errmsg[$state])$detailed_status | errcount=$errcount;;;"
 $host.ui.RawUI.ForegroundColor = $($state_colors[$state])
 Write-Output $output
 $host.ui.RawUI.ForegroundColor = $t
