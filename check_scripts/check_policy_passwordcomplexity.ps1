@@ -1,10 +1,11 @@
 [CmdletBinding()]
 $t = $host.ui.RawUI.ForegroundColor
-$states_text = @('ok', 'critical', 'unknown')
-$state_colors = @('Green', 'Red', 'DarkGray')
+$states_text = @('ok', 'warning', 'critical', 'unknown')
+$state_colors = @('Green', 'Yellow', 'Red', 'DarkGray')
 $state = 0
-$err = ""
-$errmsg = "ok"
+$errcount = 0
+$detailed_status = ""
+$assembly_status = @()
 
 try
 {
@@ -31,9 +32,9 @@ try
 					
 					if([int]$value -eq 0)
 					{
-						$state = 1
-						Write-Host "No Lockout Policy" -ForegroundColor Red
-						$err = "_lockout"
+						Write-Verbose "No Lockout Policy" -ForegroundColor Red
+						$errcount++
+						$assembly_status += "lockout"
 					}
 				}
 				
@@ -43,24 +44,36 @@ try
 					
 					if([int]$value -eq 0)
 					{
-						$state = 1
-						Write-Host "No Strong Password Policy" -ForegroundColor Red
-						$err = "_strong_password"
+						Write-Verbose "No Strong Password Policy" -ForegroundColor Red
+						$errcount++
+						$assembly_status += "strong_password"
 					}
 				}
 			}
 		}
 		Remove-Item $file
-		if ($err -ne "") {$errmsg = "err" + $err}
+		
+		if ($errcount -gt 0)
+		{
+			$state = 2
+			
+			foreach ($s in $assembly_status)
+			{
+				if (!($detailed_status -like "*$s*"))
+				{
+					$detailed_status = [string]::Join(".",$detailed_status,$s)
+				}
+			}
+		}
 	}
 }
-catch { 
+catch
+{ 
 	Write-Host $_ -ForegroundColor Red
-	$state = 2
-	$errmsg = "err"
+	$state = 3
 }
 	
-$output = "check_policy_password.$errmsg | errlvl=$state;;;"
+$output = "check_policy_password.$($states_text[$state])$detailed_status | errcount=$errcount;;;"
 $host.ui.RawUI.ForegroundColor = $($state_colors[$state])
 Write-Output $output
 $host.ui.RawUI.ForegroundColor = $t
