@@ -1,4 +1,4 @@
-﻿[CmdletBinding()]
+[CmdletBinding()]
 Param(
     [Parameter(Mandatory=$true,
                Position=0,
@@ -27,7 +27,8 @@ Begin {
 Process {
     foreach($job in $JobName){
         if ($task = Get-ScheduledTaskInfo $job -ErrorAction SilentlyContinue) {
-            if ($task.LastTaskResult -ne "0") { 
+            if (($task.LastTaskResult -ne "0") -and ($task.LastTaskResult -ne "267009"))
+			{ 
                 $state += 2
                 $jobs['bad'] += $job
             } else {
@@ -52,5 +53,3 @@ End {
     $host.ui.RawUI.ForegroundColor = $t
     exit $state
 }
-
-
