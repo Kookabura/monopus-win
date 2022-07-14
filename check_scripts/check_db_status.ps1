@@ -23,7 +23,7 @@ try
 	{
 		if (!($db.Status -like "*Normal*"))
 		{
-            $s = $db.Name + " - " + $db.Status
+            		$s = $db.Name + " - " + $db.Status + "; "
 			$list_db += $s.ToString()
 			$n++
 			$state = 2
