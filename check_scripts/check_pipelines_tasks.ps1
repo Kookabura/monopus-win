@@ -1,7 +1,9 @@
 [CmdletBinding()]
 Param
 (
-
+	[Parameter(Mandatory=$true)][string]$organization_name,
+	[Parameter(Mandatory=$true)][string]$project_name,
+	[Parameter(Mandatory=$true)][string]$pass
 )
 
 $t = $host.ui.RawUI.ForegroundColor
@@ -12,9 +14,6 @@ $count_active = 0
 $count_stuck = 0
 $now = get-date
 
-$organization_name = ""
-$project_name = ""
-$pass = ''
 $authenication = @{Authorization = 'Basic ' + [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes(":$($pass)")) }
 $url = "https://dev.azure.com/$($organization_name)/$($project_name)/_apis/pipelines?api-version=6.0-preview.1"
 
