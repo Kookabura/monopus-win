@@ -27,7 +27,7 @@ try
 		}
 	} | Sort-Object -Descending -Property InstalledOn | select -first 1
 
-    $daysSinceLastUpdate = (New-TimeSpan –Start $lastUpdate.InstalledOn –End (Get-Date)).Days
+    $daysSinceLastUpdate = (New-TimeSpan -Start $lastUpdate.InstalledOn -End (Get-Date)).Days
     
     if ($daysSinceLastUpdate -gt $W -and $availableUpdates)
 	{
