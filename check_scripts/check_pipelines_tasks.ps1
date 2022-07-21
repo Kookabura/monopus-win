@@ -3,7 +3,8 @@ Param
 (
 	[Parameter(Mandatory=$true)][string]$organization_name,
 	[Parameter(Mandatory=$true)][string]$project_name,
-	[Parameter(Mandatory=$true)][string]$pass
+	[Parameter(Mandatory=$true)][string]$pass,
+	[Parameter()][int32]$minutes = 120
 )
 
 $t = $host.ui.RawUI.ForegroundColor
@@ -35,7 +36,7 @@ try
 				$ts = New-TimeSpan -Start $p.createdDate -End $now
 				$minutes_difference = ($ts.Days * 1440) + ($ts.Hours * 60) + $ts.Minutes
 
-				if ($minutes_difference -ge 120)
+				if ($minutes_difference -ge $minutes)
 				{
 					$count_stuck++
 				}
