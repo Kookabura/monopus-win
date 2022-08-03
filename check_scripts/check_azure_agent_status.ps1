@@ -9,7 +9,8 @@ $t = $host.ui.RawUI.ForegroundColor
 $states_text = @('ok', 'warning', 'critical', 'unknown')
 $state_colors = @('Green', 'Yellow', 'Red', 'DarkGray')
 $state = 0
-[string]$list_offline_agents
+$names_offline_agents = ""
+$list_offline_agents = ""
 $count_agents = 0
 $count_offline_agents = 0
 
@@ -31,7 +32,8 @@ try
 		{
 			if ($a.status -eq "offline") #"online" "offline"
 			{
-                $list_offline_agents += $a.name + ", "
+                $s = $a.name
+                $names_offline_agents += $s.ToString()
                 $count_offline_agents++
 			}
 		}
@@ -41,6 +43,8 @@ try
 	{
 		$state = 2
 	}
+	
+	$list_offline_agents = [string]::Join(', ', $names_offline_agents)
 }
 catch
 {
