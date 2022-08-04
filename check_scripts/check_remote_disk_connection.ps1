@@ -9,6 +9,7 @@ Begin
 	$t = $host.ui.RawUI.ForegroundColor
 	$states_text = @('ok', 'warning', 'critical', 'unknown')
 	$state_colors = @('Green', 'Yellow', 'Red', 'DarkGray')
+	[string[]]$ofline_disk = $NULL
 	$fails = 0
 	$state = 3
 }
@@ -19,15 +20,19 @@ Process
 	{
 		foreach ($path in $disk)
 		{
-			if ( test-path $path )
+			if (!(test-path $path))
 			{
-				$state = 0
-			}
-			else
-			{
-				$state = 2
+                $ofline_disk += $path
 				$fails++
 			}
+		}
+		if ($fails -gt 0)
+		{
+			$state = 2
+		}
+		else
+		{
+			$state = 0
 		}
 	}
 	catch
@@ -38,7 +43,7 @@ Process
 
 End
 {
-	$output = "check_remote_disk_connection.$($states_text[$state]) | err_connection=$fails;;;"
+	$output = "check_remote_disk_connection.$($states_text[$state])::offline_disks==$([string]::Join(', ', $ofline_disk)) | err_connection=$fails;;;"
 	Write-Verbose $output
 	$host.ui.RawUI.ForegroundColor = $($state_colors[$state])
 	Write-Output $output
