@@ -1,7 +1,7 @@
 [CmdletBinding()]
 Param
 (
-	[Parameter(Mandatory=$true)][string[]]$disk
+	#[Parameter(Mandatory=$true)][string[]]$disk
 )
 
 Begin
@@ -18,6 +18,18 @@ Process
 {
 	try
 	{
+		$remote_disks = Get-SmbMapping
+		
+		foreach ($remote_disk in $remote_disks)
+		{
+			if ($remote_disk.status -ne "OK")
+			{
+				$ofline_disk += $remote_disk.localpath + " (" + $remote_disk.remotepath + ")"
+				$fails++
+			}
+		}
+		
+		<#
 		foreach ($path in $disk)
 		{
 			if (!(test-path $path))
@@ -25,7 +37,7 @@ Process
                 $ofline_disk += $path
 				$fails++
 			}
-		}
+		}#>
 		if ($fails -gt 0)
 		{
 			$state = 2
