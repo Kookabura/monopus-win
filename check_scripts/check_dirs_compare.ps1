@@ -24,7 +24,7 @@ Process
 	{
 		foreach($backupTask in $backupTasks)
 		{
-			if ($backupTask.State -eq 'Running')
+			if ((Get-ScheduledTaskInfo $backupTask).State -eq 'Running')
 			{
 				$state=0
 				$state2=4
