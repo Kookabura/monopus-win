@@ -32,7 +32,7 @@ try
 					
 					if([int]$value -eq 0)
 					{
-						Write-Verbose "No Lockout Policy" -ForegroundColor Red
+						Write-Verbose "No Lockout Policy"
 						$errcount++
 						$assembly_status += "lockout"
 					}
@@ -44,7 +44,7 @@ try
 					
 					if([int]$value -eq 0)
 					{
-						Write-Verbose "No Strong Password Policy" -ForegroundColor Red
+						Write-Verbose "No Strong Password Policy"
 						$errcount++
 						$assembly_status += "strong_password"
 					}
