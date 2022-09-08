@@ -60,7 +60,7 @@ catch
     $state = 3  
 }
 
-$output = "check_updates.$($states_text[$state])::availableupdates==$($availableUpdates)::dayssincelastupdate==$daysSinceLastUpdate::err==$err | availableupdates=$availableupdates;;; dayssincelastupdate=$daysSinceLastUpdate;;;"
+$output = "check_updates.$($states_text[$state])::availableupdates==$($availableUpdates)__dayssincelastupdate==$($daysSinceLastUpdate)__err==$err | availableupdates=$availableupdates;;; dayssincelastupdate=$daysSinceLastUpdate;;;"
 
 if ($host.UI.RawUI.WindowTitle -match 'Powershell')
 {
