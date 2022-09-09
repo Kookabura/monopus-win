@@ -6,14 +6,9 @@
 
     [CmdletBinding()]
     PARAM(
-        [Parameter()]
-        [int]$retry_interval = 10,
-        [Parameter()]
-        [boolean]$work = $false,
-        [Parameter()]
-        [int]$timeout = 30,
-        [Parameter()]
-        [string]$config_path = "${env:ProgramFiles(x86)}\MonOpus\main.cfg"
+        [Parameter()][int]$retry_interval = 10,
+        [Parameter()][boolean]$work = $false,
+        [Parameter()][string]$config_path = "${env:ProgramFiles(x86)}\MonOpus\main.cfg"
     )
 
     Begin {
@@ -138,12 +133,12 @@
                         $async = $job.BeginInvoke()
 
                         $n = 0
-                        while (!$async.IsCompleted -and $n -le $timeout) {
+                        while (!$async.IsCompleted -and $n -le $config.timeout) {
                             $n++
                             sleep 1
                         }
 
-                        if ($n -gt $timeout) {
+                        if ($n -gt $config.timeout) {
                             Write-Verbose "$(get-date) Timeout exceeded"
                             $job.Stop()
                         } else {
