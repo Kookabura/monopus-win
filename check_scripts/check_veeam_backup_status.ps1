@@ -1,4 +1,4 @@
-﻿[CmdletBinding()]
+[CmdletBinding()]
 Param
 (
 	[Parameter()][int32]$h = 24
@@ -50,7 +50,7 @@ catch
 $perf = "warning_backups=" + $backup_names['Warning'].count + ';1;1;0;' + " failed_backups="+ $backup_names['Failed'].count + ';1;1;0;'
 $output = "Warning==" + ($backup_names['Warning'] -join ', ') + "__Failed==" + ($backup_names['Failed'] -join ', ')
 
-$output = "get_backupstatus_$($states_text[$state])$message::$output | $perf"
+$output = "check_veeam_backup_status.$($states_text[$state])$message::$output | $perf"
 $host.ui.RawUI.ForegroundColor = $($state_colors[$state])
 Write-Output $output
 $host.ui.RawUI.ForegroundColor = $t
