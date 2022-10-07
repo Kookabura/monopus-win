@@ -4,34 +4,35 @@ Param(
 	[Parameter(Mandatory=$true)][string]$SqlDatabase,
 	[Parameter(Mandatory=$true)][string]$SqlTable,
 	[Parameter(Mandatory=$true)][string]$SqlSearchParameter,
-	[Parameter()][int32]$C = 0
+	[Parameter()][int32]$W,
+	[Parameter()][int32]$C
 )
 
 $t = $host.ui.RawUI.ForegroundColor
-$states_text = @('ok', 'critical', 'unknown')
-$state_colors = @('Green', 'Red', 'DarkGray')
-$state = 2
-
-$SqlConnection = New-Object System.Data.SqlClient.SqlConnection
-$SqlConnection.ConnectionString = "Server=$SqlServer; Database=$SqlDatabase; Integrated Security=True"
+$states_text = @('ok', 'warning', 'critical', 'unknown')
+$state_colors = @('Green', 'Yellow', 'Red', 'DarkGray')
+$state = 0
 
 try
 {
+	$SqlConnection = New-Object System.Data.SqlClient.SqlConnection
+	$SqlConnection.ConnectionString = "Server=$SqlServer; Database=$SqlDatabase; Integrated Security=True"
 	$SqlConnection.Open()
 	$SqlCmd = $SqlConnection.CreateCommand()
-	$SqlCmd.CommandText = "SELECT Count(*) FROM [$SqlDatabase].[dbo].[$SqlTable] WHERE ((SqlSearchParameter IS NULL) OR (SqlSearchParameter = 0)) AND (CONVERT (date, ImportDate) like CONVERT (date, SYSDATETIME()))"
+	$SqlCmd.CommandText = "SELECT Count(*) FROM [$SqlDatabase].[dbo].[$SqlTable] WHERE (($SqlSearchParameter IS NULL) OR ($SqlSearchParameter = 0)) AND (CONVERT (date, ImportDate) like CONVERT (date, SYSDATETIME()))"
 	$objReader = $SqlCmd.ExecuteReader()
 
 	while ($objReader.read())
 	{
 		$n = $objReader.GetValue(0)
+		
 	  	if ($n -gt $C)
 		{
-			$state = 1
+			$state = 2
 		}
-		else
+		elseif ($n -gt $W)
 		{
-			$state = 0
+			$state = 1
 		}
 	}
 
@@ -41,10 +42,10 @@ try
 catch
 {
 	Write-Host $_ -ForegroundColor Red
-	$state = 2
+	$state = 3
 }
 
-$output = "find_sql_data.$($states_text[$state])::counted==$n | counted=$n;;;"
+$output = "check_null_sql_data.$($states_text[$state])::counted==$n | counted=$n;;;"
 
 $host.ui.RawUI.ForegroundColor = $($state_colors[$state])
 Write-Output $output
