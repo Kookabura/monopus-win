@@ -5,7 +5,6 @@ Param
 	[Parameter(Mandatory=$true)][string]$pass
 )
 
-
 $t = $host.ui.RawUI.ForegroundColor
 $states_text = @('ok', 'warning', 'critical', 'unknown')
 $state_colors = @('Green', 'Yellow', 'Red', 'DarkGray')
@@ -21,27 +20,31 @@ $url_pools = "https://dev.azure.com/$($organization_name)/_apis/distributedtask/
 
 try
 {
-    #(Invoke-RestMethod -Method GET -Uri $url_pools -Headers $authenication).value
     $pool_agents_data = (Invoke-RestMethod -Method GET -Uri $url_pools -Headers $authenication).value
 	
 	foreach ($pool_agent_data in $pool_agents_data)
 	{
-        $pool_name = $pool_agent_data.name
-		$url_agent = "https://dev.azure.com/$($organization_name)/_apis/distributedtask/pools/$($pool_agent_data.id)/agents?api-version=5.1"
-        
-        #Invoke-RestMethod -Method GET -Uri $url_agent -Headers $authenication
-		$agent_in_pool = Invoke-RestMethod -Method GET -Uri $url_agent -Headers $authenication
+        if (!($pool_agent_data.name -like "Hosted*"))
+        {
+            $pool_name = $pool_agent_data.name
 
-		foreach ($agent in $agent_in_pool.value)
-		{
-            $count_agents++
-			if ($agent.status -eq "offline") #"online" "offline"
-			{
-                $summary_name = $agent.name + " в группе " + $pool_name
-                $names_offline_agents += $summary_name.ToString()
-                $count_offline_agents++
-			}
-		}
+		    $url_agent = "https://dev.azure.com/$($organization_name)/_apis/distributedtask/pools/$($pool_agent_data.id)/agents?api-version=5.1"
+        
+
+		    $agent_in_pool = Invoke-RestMethod -Method GET -Uri $url_agent -Headers $authenication
+
+		    foreach ($agent in $agent_in_pool.value)
+		    {
+                $count_agents++
+
+			    if ($agent.status -like "offline" -and !($agent.provisioningState -eq "Deallocated")) #"online" "offline"
+			    {
+                    $summary_name = $agent.name + " в группе " + $pool_name
+                    $names_offline_agents += $summary_name.ToString()
+                    $count_offline_agents++
+			    }
+		    }
+        }
 	}
 
 	if ($count_offline_agents -gt 0)
