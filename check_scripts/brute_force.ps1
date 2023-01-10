@@ -3,9 +3,9 @@ Param(
   [Parameter()]
    [int32]$period = 10,
   [Parameter()]
-   [int32]$W = 0,
+   [int32]$W = 50,
   [Parameter()]
-   [int32]$C = 10
+   [int32]$C = 10000
 )
 
 $t = $host.ui.RawUI.ForegroundColor
