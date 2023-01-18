@@ -27,7 +27,7 @@ try
 	
 	foreach ($rule in $rulecollections)
 	{
-		if (($rule.RuleCollectionType -ne "Dll") -and ($rule.RuleCollectionType -ne "Appx"))
+		if ($rule.RuleCollectionType -notmatch "Dll|Appx")
 		{
 			if ($rule.EnforcementMode -ne "Enabled")
 			{
