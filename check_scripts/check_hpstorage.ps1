@@ -18,12 +18,14 @@ $state_colors = @('Green', 'Yellow', 'Red', 'DarkGray')
 $bad_controllers = @()
 $bad_drives = @()
 $output = ''
+$perf = ''
 
 if (Test-path "C:\Program Files\HP\hpssacli\bin\hpssacli.exe") {
     (Invoke-Expression -Command "& 'C:\Program Files\HP\hpssacli\bin\hpssacli.exe' controller all show" | ? {$_ -ne ""}) -match "(?<=Slot\s)\d+" | Out-Null
     
     if ($matches) {
         $state = 0
+        $perf = 'errors=0;;;;'
         $controllers = $data.Controllers."Response Data".'Number of Controllers'        
         foreach ($slot in $matches.keys) {
             $drives = Invoke-Expression -Command "& 'C:\Program Files\HP\hpssacli\bin\hpssacli.exe' controller slot=$($matches.Item($slot)) physicaldrive all show"
@@ -33,6 +35,7 @@ if (Test-path "C:\Program Files\HP\hpssacli\bin\hpssacli.exe") {
                     $matches.keys | % {$bad_drives += $matches.Item($_)}
                     $bad_controllers += $slot
                     $state = 2
+                    $perf = 'errors=1;;;;'
                 }
             }
         }
@@ -45,6 +48,6 @@ if (Test-path "C:\Program Files\HP\hpssacli\bin\hpssacli.exe") {
 }
 
 $host.ui.RawUI.ForegroundColor = $($state_colors[$state])
-Write-Output "check_hpstorage_$($states_text[$state])::$output"
+Write-Output "check_hpstorage_$($states_text[$state])::$output | $perf"
 $host.ui.RawUI.ForegroundColor = $t
 exit $state
