@@ -149,7 +149,9 @@ function Monitor-Host {
 
                         if ($n -gt $config.timeout) {
                             Write-Verbose "$(get-date) Timeout exceeded"
-                            $job.Stop()
+							$lastexitcode = 3
+							$result = 'check_timeout_exsist_on_client'
+                            #$job.Stop()
                         } else {
                             if ($job.HadErrors -and $job.Streams.Error) {
                                 Write-Verbose "$(get-date) Job finished with error $($job.Streams.Error)"
