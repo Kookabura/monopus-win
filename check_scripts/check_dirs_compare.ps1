@@ -24,13 +24,21 @@ Process
 	{
 		foreach($backupTask in $backupTasks)
 		{
-			if ((Get-ScheduledTaskInfo $backupTask).State -eq 'Running')
+            $active_task = 0
+
+			if ((Get-ScheduledTask $backupTask).State -eq 'Running')
 			{
-				$state=0
-				$state2=4
-				Write-Host 'Dirs are different, but the task is still running' -ForegroundColor Yellow
-				$backup = $true
+				Write-Verbose 'Dirs are different, but the $backupTask is still running'
+				$active_task ++
 			}
+            
+            if ($active_task -gt 0)
+			{
+                $backup = $true
+                $diff = 0
+				$state = 0
+				$state2 = 4
+            }
 		}
 		
 		if (!$backup)
@@ -61,7 +69,7 @@ Process
 End
 {
 	$output = "check_dirs_compare.$($states_text[$state2]) | diff=$diff;;;"
-	Write-Verbose $output
+	Write-Verbose $output 
 	$host.ui.RawUI.ForegroundColor = $($state_colors[$state])
 	Write-Output $output
 	$host.ui.RawUI.ForegroundColor = $t
