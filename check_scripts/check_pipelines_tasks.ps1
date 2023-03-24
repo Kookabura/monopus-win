@@ -1,10 +1,11 @@
 [CmdletBinding()]
 Param
 (
-	[Parameter(Mandatory=$true)][string]$organization_name,
-	[Parameter(Mandatory=$true)][string]$project_name,
-	[Parameter(Mandatory=$true)][string]$pass,
-	[Parameter()][int32]$minutes = 120
+	[Parameter()][string]$organization_name = "",
+	[Parameter()][string]$project_name = "",
+	[Parameter()][string]$pass = "",
+    [Parameter()][int32]$W,
+    [Parameter()][int32]$C
 )
 
 $t = $host.ui.RawUI.ForegroundColor
@@ -13,6 +14,7 @@ $state_colors = @('Green', 'Yellow', 'Red', 'DarkGray')
 $state = 0
 $count_active = 0
 $count_stuck = 0
+$count_warning = 0
 $now = get-date
 
 $authenication = @{Authorization = 'Basic ' + [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes(":$($pass)")) }
@@ -35,18 +37,28 @@ try
 
 				$ts = New-TimeSpan -Start $p.createdDate -End $now
 				$minutes_difference = ($ts.Days * 1440) + ($ts.Hours * 60) + $ts.Minutes
-
-				if ($minutes_difference -ge $minutes)
+                
+				if ($minutes_difference -ge $W)
 				{
-					$count_stuck++
+					$count_warning++
+
+					if ($minutes_difference -ge $C)
+					{
+						$count_stuck++
+					}
 				}
 			}
 		}
 	}
-
-	if ($count_stuck -gt 0)
+    
+	if ($count_warning -gt 0)
 	{
-		$state = 2
+		$state = 1
+
+		if ($count_stuck -gt 0)
+		{
+		    $state = 2
+		}
 	}
 }
 catch
@@ -55,7 +67,7 @@ catch
     $state = 3
 }
 
-$output = "check_pipelines_tasks.$($states_text[$state]) | active_pipelines=$count_active; stuck_pipelines=$count_stuck;"
+$output = "check_pipelines_tasks.$($states_text[$state])::warning==$count_warning::stuck==$count_stuck | active_pipelines=$count_active; stuck_pipelines=$count_stuck;"
 
 $host.ui.RawUI.ForegroundColor = $($state_colors[$state])
 Write-Output $output
