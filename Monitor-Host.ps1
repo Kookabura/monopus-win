@@ -1,4 +1,4 @@
-﻿function Monitor-Host {
+function Monitor-Host {
     <#
     .Synopsis
         Execute scripts with config from monopus.io. Requires Powershell 3.0
@@ -6,14 +6,9 @@
 
     [CmdletBinding()]
     PARAM(
-        [Parameter()]
-        [int]$retry_interval = 10,
-        [Parameter()]
-        [boolean]$work = $false,
-        [Parameter()]
-        [int]$timeout = 30,
-        [Parameter()]
-        [string]$config_path = "${env:ProgramFiles(x86)}\MonOpus\main.cfg"
+        [Parameter()][int]$retry_interval = 10,
+        [Parameter()][boolean]$work = $false,
+        [Parameter()][string]$config_path = "${env:ProgramFiles(x86)}\MonOpus\main.cfg"
     )
 
     Begin {
@@ -25,12 +20,21 @@
                 $Config
             )
             process {
-                $settings_obj = (Invoke-WebRequest $config.uri -Method Post -UseBasicParsing -Body @{api_key=$($config.api_key);id=$($config.id);mon_action='check/status';class="host"}).content | ConvertFrom-Json
-                $services = @{}
-                if ($settings_obj -and $settings_obj.data.services) {
-                    ($settings_obj.data.services).psobject.properties  | % {$services[$_.Name] = $_.Value}
+                try
+                {
+                    $settings_obj = (Invoke-WebRequest $config.uri -Method Post -UseBasicParsing -Body @{api_key=$($config.api_key);id=$($config.id);mon_action='check/status';class="host"}).content | ConvertFrom-Json
+                    $services = @{}
+                    if ($settings_obj -and $settings_obj.data.services) {
+                        ($settings_obj.data.services).psobject.properties  | % {$services[$_.Name] = $_.Value}
+                    }
+                    return $services
                 }
-                return $services
+                catch
+                {
+                    Write-Verbose "$(get-date) $_"
+                    sleep -Seconds $retry_interval
+                }
+                
             }
         }
 
@@ -59,6 +63,7 @@
                 }
 
                 $response = Invoke-RestMethod $config.uri -Method Post -Body $data
+
                 Write-Verbose "$(get-date) Response on creating item is: $($response | convertTo-Json)"
                 if (!$response.success) {
                     throw "$(get-date) Error on host creation.";
@@ -122,7 +127,6 @@
 
                     $command = ($config.scripts_path + $services[$key].command + ".ps1")
 
-            
                     $result = $false
                     if (Test-Path $command) {
                         Write-Verbose "$(get-date) Starting check command $command with parameters: $($parameters | ConvertTo-Json)"
@@ -138,14 +142,16 @@
                         $async = $job.BeginInvoke()
 
                         $n = 0
-                        while (!$async.IsCompleted -and $n -le $timeout) {
+                        while (!$async.IsCompleted -and $n -le $config.timeout) {
                             $n++
                             sleep 1
                         }
 
-                        if ($n -gt $timeout) {
+                        if ($n -gt $config.timeout) {
                             Write-Verbose "$(get-date) Timeout exceeded"
-                            $job.Stop()
+							$lastexitcode = 3
+							$result = 'check_timeout_on_client'
+                            #$job.Stop()
                         } else {
                             if ($job.HadErrors -and $job.Streams.Error) {
                                 Write-Verbose "$(get-date) Job finished with error $($job.Streams.Error)"
@@ -178,6 +184,7 @@
                         }
                     } catch {
                         Write-Error "$(get-date) $_"
+                        sleep -Seconds $retry_interval
                     }
             
                     if ($r.statusCode -eq 200) {
@@ -196,6 +203,12 @@
                             }
                         }
                     }
+					else
+					{
+                        Write-Error "$(get-date) $_"
+						sleep -Seconds $retry_interval
+					}
+					
                 }
     
             }
@@ -224,4 +237,4 @@
 }
 
 #requires -Version 3.0
-Monitor-Host # Add for logging: *>> "$PSScriptRoot\log.log"
+Monitor-Host # Add for logging: -Verbose *>> "$PSScriptRoot\log.log"

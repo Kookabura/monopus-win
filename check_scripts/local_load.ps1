@@ -5,7 +5,9 @@ Param(
   [Parameter()]
    [int32]$C = 95,
   [Parameter()]
-    $config = $global:config
+    $config = $global:config,
+  [Parameter()]
+	$average = -1
 )
 
 $states_text = @('ok', 'war', 'critical')
@@ -39,8 +41,13 @@ if (!$first) {
 } else {
     $sample = [wmi]"Win32_PerfRawData_PerfOS_Processor.Name='_Total'"
     $average = [int]((1 - ( ($sample.PercentProcessorTime - $indices['cpu']['load']) / ($sample.Timestamp_Sys100NS - $indices['cpu']['timestamp']) ) ) * 100)
-    $indices['cpu']['load'] = $sample.PercentProcessorTime
-    $indices['cpu']['timestamp'] = $sample.Timestamp_Sys100NS
+    while (($average -lt 0 -or $average -gt 100) -and $max -lt 3) {
+        $prev_load = if ($sample.PercentProcessorTime) {$sample.PercentProcessorTime} else {$indices['cpu']['load']}
+        $prev_timestamp = if ($sample.Timestamp_Sys100NS) {$sample.Timestamp_Sys100NS} else {$indices['cpu']['timestamp']}
+        $sample = [wmi]"Win32_PerfRawData_PerfOS_Processor.Name='_Total'"
+        $average = [int]((1 - ( ($sample.PercentProcessorTime - $prev_load) / ($sample.Timestamp_Sys100NS - $prev_timestamp) ) ) * 100)
+        $max++
+    }
     $output = "load==$average | load=$average;$w;$c;0;"
 }
 

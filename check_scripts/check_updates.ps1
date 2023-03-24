@@ -1,42 +1,78 @@
 [CmdletBinding()]
-Param(
-  [Parameter()]
-   [int32]$W = 30,
-  [Parameter()]
-   [int32]$C = 10
+Param
+(
+	[Parameter()][int32]$W = 25,
+	[Parameter()][int32]$C = 30
 )
 
-if ($host.UI.RawUI.WindowTitle -match 'Powershell') {
-    $t = $host.ui.RawUI.ForegroundColor
-}
 $states_text = @('ok', 'warning', 'critical', 'unknown')
-$state_colors = @('Green', 'Yellow', 'Red', 'DarkGray')
-$state = 3
+$state = 0
+$err = ""
 
-# latest update installation date and number of available updates
 try
 {
-	$Session = New-Object -ComObject Microsoft.Update.Session
-	$Searcher = $Session.CreateUpdateSearcher()
-	$SearchResult = $Searcher.Search("IsAssigned=1 and IsHidden=0 and IsInstalled=0")
-	$availableUpdates = $($SearchResult.updates.count)
-	$HistoryCount = $Searcher.GetTotalHistoryCount()
-	$lastUpdate = $Searcher.QueryHistory(0,$HistoryCount) | ForEach-Object -Process {
-		New-Object -TypeName PSObject -Property @{
-			InstalledOn = Get-Date -Date $_.Date;
-		}
-	} | Sort-Object -Descending -Property InstalledOn | select -first 1
-
-    $daysSinceLastUpdate = (New-TimeSpan -Start $lastUpdate.InstalledOn -End (Get-Date)).Days
-    
-    if ($daysSinceLastUpdate -gt $W -and $availableUpdates)
+	if ((Get-Service 'WSearch').Status -like "Running")
 	{
-        $state = 2
-    }
+		$Session = New-Object -ComObject Microsoft.Update.Session
+		$Searcher = $Session.CreateUpdateSearcher()
+		$HistoryCount = $Searcher.GetTotalHistoryCount()
+		$lastUpdate = $Searcher.QueryHistory(0,$HistoryCount) | ForEach-Object -Process {
+						New-Object -TypeName PSObject -Property @{
+							InstalledOn = Get-Date -Date $_.Date;
+						}
+					} | Sort-Object -Descending -Property InstalledOn | select -first 1
+		$daysSinceLastUpdate = (New-TimeSpan -Start $lastUpdate.InstalledOn -End (Get-Date)).Days
+
+		if ((Get-Service 'wuauserv').Status -like "Running")
+		{
+			$SearchResult = $Searcher.Search("IsAssigned=1 and IsHidden=0 and IsInstalled=0")
+			$availableUpdates = $($SearchResult.updates.count)
+
+			if (($daysSinceLastUpdate -gt $W -and $daysSinceLastUpdate -lt $C) -and $availableUpdates)
+			{
+				$state = 1
+			}
+			else
+			{
+				if ($daysSinceLastUpdate -ge $C -and $availableUpdates)
+				{
+					$state = 2
+				}
+			}
+		}
+		else
+		{
+			$err = "Windows Update"
+			$state = 1
+		}
+	}
 	else
 	{
-        $state = 0
-    }
+		$err = "Windows Search"
+		$state = 1
+		
+		try
+		{
+			$lastUpdate = Get-Date ((Get-WmiObject -Class win32_quickfixengineering | Sort-Object -Descending -Property InstalledOn | select -first 1).InstalledOn).Date
+			$daysSinceLastUpdate = (New-TimeSpan -Start $lastUpdate -End (Get-Date)).Days
+			
+			if ($daysSinceLastUpdate -gt $W -and $daysSinceLastUpdate -lt $C)
+			{
+				$state = 1
+			}
+			else
+			{
+				if ($daysSinceLastUpdate -ge $C)
+				{
+					$state = 2
+				}
+			}
+		}
+		catch
+		{ 
+			Write-Host $_ -ForegroundColor Red 
+		}
+	}
 }
 catch
 { 
@@ -44,17 +80,6 @@ catch
     $state = 3  
 }
 
-$output = "check_updates.$($states_text[$state])::availableupdates==$($availableUpdates)__dayssincelastupdate==$daysSinceLastUpdate | availableupdates=$availableupdates;;; dayssincelastupdate=$daysSinceLastUpdate;;;"
-
-if ($host.UI.RawUI.WindowTitle -match 'Powershell')
-{
-    $host.ui.RawUI.ForegroundColor = $($state_colors[$state])
-}
-
+$output = "check_updates.$($states_text[$state])::availableupdates==$($availableUpdates)__dayssincelastupdate==$($daysSinceLastUpdate)__err==$err | availableupdates=$availableupdates;;; dayssincelastupdate=$daysSinceLastUpdate;;;"
 Write-Output $output
-if ($host.UI.RawUI.WindowTitle -match 'Powershell')
-{
-    $host.ui.RawUI.ForegroundColor = $t
-}
-
 exit $state

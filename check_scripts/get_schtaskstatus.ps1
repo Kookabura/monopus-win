@@ -45,7 +45,7 @@ Process {
 End {
     $state = ($state | measure -Maximum).Maximum
     $perf = "bad_jobs=" + ($jobs['bad'].count + $jobs['unknown'].count) + ';1;1;0;' + $JobName.count
-    $output = "good==" + ($jobs['good'] -join ',') + "__bad==" + ($jobs['bad'] -join ',') + "__unknown==" + ($jobs['unknown'] -join ',')
+    $output = "good==" + ($jobs['good'] -join ', ') + "__bad==" + ($jobs['bad'] -join ', ') + "__unknown==" + ($jobs['unknown'] -join ', ')
     $output = "get_schtaskstatus_$($states_text[$state])::$output | $perf"
     Write-Verbose $output
     $host.ui.RawUI.ForegroundColor = $($state_colors[$state])

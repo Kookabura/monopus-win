@@ -4,8 +4,8 @@ Param
 	[Parameter()][string]$organization_name = "",
 	[Parameter()][string]$project_name = "",
 	[Parameter()][string]$pass = "",
-    	[Parameter()][int32]$W,
-    	[Parameter()][int32]$C
+    [Parameter()][int32]$W,
+    [Parameter()][int32]$C
 )
 
 $t = $host.ui.RawUI.ForegroundColor
