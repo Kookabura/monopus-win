@@ -1,13 +1,11 @@
 [CmdletBinding()]
 Param(
     [Parameter()][int32]$period = 10,
-    [Parameter()][int32]$W = 0,
-    [Parameter()][int32]$C = 10
+    [Parameter()][int32]$W = 95,
+    [Parameter()][int32]$C = 100
 )
 
-$t = $host.ui.RawUI.ForegroundColor
 $states_text = @('ok', 'warning', 'critical', 'unknown')
-$state_colors = @('Green', 'Yellow', 'Red', 'DarkGray')
 
 $platform1c_obj = "V83.COMConnector"
 #$service1c_name =  "1C:Enterprise 8.3 Server Agent*"
@@ -45,8 +43,18 @@ try
             }
         }
     }
-
+	
     $all_sessions_count = [int]$sessions.Count
+	
+	if ($all_sessions_count -gt $W)
+	{
+		$state = 1
+		
+		if ($all_sessions_count -gt $C)
+		{
+			$state = 2
+		}
+	}
 }
 catch
 {
@@ -56,7 +64,5 @@ catch
 
 $output = "1c_sessions_check.$($states_text[$state])::all_sessions_count==$($all_sessions_count)__unic_user==$($unicUser.count)__background_job==$($BackgroundJob) | all_sessions_count=$($all_sessions_count);;;; unic_user=$($unicUser.count);;;; background_job=$($BackgroundJob);;;;"
 
-$host.ui.RawUI.ForegroundColor = $($state_colors[$state])
 Write-Output $output
-$host.ui.RawUI.ForegroundColor = $t
 exit $state
