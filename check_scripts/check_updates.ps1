@@ -13,15 +13,43 @@ try
 {
 	if ((Get-Service 'WSearch').Status -like "Running")
 	{
-		$Session = New-Object -ComObject Microsoft.Update.Session
-		$Searcher = $Session.CreateUpdateSearcher()
-		$HistoryCount = $Searcher.GetTotalHistoryCount()
-		$lastUpdate = $Searcher.QueryHistory(0,$HistoryCount) | ForEach-Object -Process {
-						New-Object -TypeName PSObject -Property @{
-							InstalledOn = Get-Date -Date $_.Date;
-						}
-					} | Sort-Object -Descending -Property InstalledOn | select -first 1
-		$daysSinceLastUpdate = (New-TimeSpan -Start $lastUpdate.InstalledOn -End (Get-Date)).Days
+        try
+        {
+            $Session = New-Object -ComObject Microsoft.Update.Session
+		    $Searcher = $Session.CreateUpdateSearcher()
+		    $HistoryCount = $Searcher.GetTotalHistoryCount()
+		    $lastUpdate = $Searcher.QueryHistory(0,$HistoryCount) | ForEach-Object -Process {
+						    New-Object -TypeName PSObject -Property @{
+							    InstalledOn = Get-Date -Date $_.Date;
+						    }
+					    } | Sort-Object -Descending -Property InstalledOn | select -first 1
+		    $daysSinceLastUpdate = (New-TimeSpan -Start $lastUpdate.InstalledOn -End (Get-Date)).Days
+		}
+		catch
+		{ 
+			try
+		    {
+			    $lastUpdate = Get-Date ((Get-WmiObject -Class win32_quickfixengineering | Sort-Object -Descending -Property InstalledOn | select -first 1).InstalledOn).Date
+			    $daysSinceLastUpdate = (New-TimeSpan -Start $lastUpdate -End (Get-Date)).Days
+
+			    if ($daysSinceLastUpdate -gt $W -and $daysSinceLastUpdate -lt $C)
+			    {
+				    $state = 1
+			    }
+			    else
+			    {
+				    if ($daysSinceLastUpdate -ge $C)
+				    {
+					    $state = 2
+				    }
+			    }
+		    }
+		    catch
+		    { 
+		    	Write-Host $_ -ForegroundColor Red
+                	$state = 3
+		    }
+		}
 
 		if ((Get-Service 'wuauserv').Status -like "Running")
 		{
@@ -50,28 +78,6 @@ try
 	{
 		$err = "Windows Search"
 		$state = 1
-		
-		try
-		{
-			$lastUpdate = Get-Date ((Get-WmiObject -Class win32_quickfixengineering | Sort-Object -Descending -Property InstalledOn | select -first 1).InstalledOn).Date
-			$daysSinceLastUpdate = (New-TimeSpan -Start $lastUpdate -End (Get-Date)).Days
-			
-			if ($daysSinceLastUpdate -gt $W -and $daysSinceLastUpdate -lt $C)
-			{
-				$state = 1
-			}
-			else
-			{
-				if ($daysSinceLastUpdate -ge $C)
-				{
-					$state = 2
-				}
-			}
-		}
-		catch
-		{ 
-			Write-Host $_ -ForegroundColor Red 
-		}
 	}
 }
 catch
