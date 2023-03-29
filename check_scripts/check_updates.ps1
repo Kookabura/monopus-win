@@ -78,6 +78,28 @@ try
 	{
 		$err = "Windows Search"
 		$state = 1
+		
+		try
+		{
+			$lastUpdate = Get-Date ((Get-WmiObject -Class win32_quickfixengineering | Sort-Object -Descending -Property InstalledOn | select -first 1).InstalledOn).Date
+			$daysSinceLastUpdate = (New-TimeSpan -Start $lastUpdate -End (Get-Date)).Days
+			
+			if ($daysSinceLastUpdate -gt $W -and $daysSinceLastUpdate -lt $C)
+			{
+				$state = 1
+			}
+			else
+			{
+				if ($daysSinceLastUpdate -ge $C)
+				{
+					$state = 2
+				}
+			}
+		}
+		catch
+		{ 
+			Write-Host $_ -ForegroundColor Red 
+		}
 	}
 }
 catch
