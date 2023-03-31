@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- check_updates.ps1. Changed default warning and critical values
+
 ## [1.6.3] - 2023-03-24
 
 ### Added

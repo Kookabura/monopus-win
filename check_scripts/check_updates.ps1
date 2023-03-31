@@ -1,8 +1,8 @@
 [CmdletBinding()]
 Param
 (
-	[Parameter()][int32]$W = 25,
-	[Parameter()][int32]$C = 30
+	[Parameter()][int32]$W = 30,
+	[Parameter()][int32]$C = 180
 )
 
 $states_text = @('ok', 'warning', 'critical', 'unknown')
