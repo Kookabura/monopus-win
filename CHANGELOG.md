@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- check_check_policy_passwordcomplexity.ps1. Fixed state bug.
+
 ### Changed
 
 - check_updates.ps1. Changed default warning and critical values
