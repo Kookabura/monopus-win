@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 ### Fixed
 
 - check_check_policy_passwordcomplexity.ps1. Fixed state bug.
+- local_load.ps1. Fixed bug.
 
 ### Changed
 
