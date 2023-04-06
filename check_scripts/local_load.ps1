@@ -1,4 +1,4 @@
-﻿[CmdletBinding()]
+[CmdletBinding()]
 Param(
   [Parameter()]
    [int32]$W = 90,
@@ -41,6 +41,7 @@ if (!$first) {
 } else {
     $sample = [wmi]"Win32_PerfRawData_PerfOS_Processor.Name='_Total'"
     $average = [int]((1 - ( ($sample.PercentProcessorTime - $indices['cpu']['load']) / ($sample.Timestamp_Sys100NS - $indices['cpu']['timestamp']) ) ) * 100)
+
     while (($average -lt 0 -or $average -gt 100) -and $max -lt 3) {
         $prev_load = if ($sample.PercentProcessorTime) {$sample.PercentProcessorTime} else {$indices['cpu']['load']}
         $prev_timestamp = if ($sample.Timestamp_Sys100NS) {$sample.Timestamp_Sys100NS} else {$indices['cpu']['timestamp']}
@@ -49,6 +50,9 @@ if (!$first) {
         $max++
     }
     $output = "load==$average | load=$average;$w;$c;0;"
+
+    $indices['cpu']['load'] = $sample.PercentProcessorTime
+    $indices['cpu']['timestamp'] = $sample.Timestamp_Sys100NS
 }
 
 if ($average -ge $w -and $average -lt $c) {

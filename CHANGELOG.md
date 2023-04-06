@@ -6,6 +6,22 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+## [1.6.4] - 2023-04-06
+
+### Added
+
+- 1c_sessions_check.ps1. Added conditions for statuses to the check.
+
+### Fixed
+
+- check_check_policy_passwordcomplexity.ps1. Fixed state bug.
+- check_updates.ps1. Minor fixes.
+- local_load.ps1. Fixed bug.
+
+### Changed
+
+- check_updates.ps1. Changed default warning and critical values
+
 ## [1.6.3] - 2023-03-24
 
 ### Added

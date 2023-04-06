@@ -2,7 +2,7 @@
 $t = $host.ui.RawUI.ForegroundColor
 $states_text = @('ok', 'warning', 'critical', 'unknown')
 $state_colors = @('Green', 'Yellow', 'Red', 'DarkGray')
-$state = 0
+$state = 3
 $errcount = 0
 $detailed_status = ""
 $assembly_status = @()
@@ -64,6 +64,8 @@ try
 					$detailed_status = [string]::Join(".",$detailed_status,$s)
 				}
 			}
+		} else {
+			$state = 0
 		}
 	}
 }
