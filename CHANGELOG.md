@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- check_scripts/1c_db_check.ps1. Added warning and critical values. Defaults are now 0.8 and 1
+
 ## [1.6.4] - 2023-04-06
 
 ### Added
