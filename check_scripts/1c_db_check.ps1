@@ -15,6 +15,8 @@ $agent1c_connection = "192.168.10.11"   #192.168.10.10/bd_test, 192.168.10.11/bd
 #$ErrorActionPreference = "SilentlyContinue"
 $state = 0
 
+$perfdata = ""
+
 try
 {
     #regsvr32 "c:\Program Files\1cv8\8.3.19.1264\bin\comcntr.dll" IInfoBaseConnectionInfo.durationAllDBMS
@@ -36,6 +38,8 @@ try
     } elseif ($DB_call_time -ge $C) {
         $state = 2
     }
+
+    $perfdata = "db_call_time=$($DB_call_time);;;;"
 }
 catch
 {
@@ -45,7 +49,7 @@ catch
 
 
 
-$output = "1c_db_check.$($states_text[$state])::db_call_time==$DB_call_time | db_call_time=$DB_call_time;;;;"
+$output = "1c_db_check.$($states_text[$state])::db_call_time==$DB_call_time | $($perfdata)
 
 $host.ui.RawUI.ForegroundColor = $($state_colors[$state])
 Write-Output $output
