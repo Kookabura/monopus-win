@@ -5,7 +5,6 @@ Param
 )
 $states_text = @('ok', 'warning', 'critical', 'unknown')
 $state = 3
-$n = 0
 $d = ""
 
 try
@@ -17,23 +16,19 @@ try
 		$deviceID = "Win32_Volume.DeviceID=`"\\\\?\\" + $deviceID + "\`""
 		$shadowQuery = gwmi win32_shadowstorage | Where-Object {$_.Volume -eq $deviceID}
 		
-		if ($shadowQuery)
+		if (!$shadowQuery)
 		{
-			$n++
-		}
-		else
-		{
-			$d += " " + $disk
+            $d += $disk + ", "
 		}
 	}
 	
-    if ($n -eq 0)
-	{
-		$state = 0
+    if ($d)
+    {
+		$state = 1
     }
 	else
 	{
-		$state = 1
+		$state = 0
     }
 }
 catch
@@ -41,6 +36,8 @@ catch
     Write-Host $_ -ForegroundColor Red
 }
 
-$output = "check_shadow_copy.$($states_text[$state])::$d"
+$d = $d.TrimEnd(", ")
+
+$output = "check_shadow_copy.$($states_text[$state])::disks==$d"
 Write-Output $output
 exit $state

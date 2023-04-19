@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 - check_scripts/1c_db_check.ps1. Added warning and critical values. Defaults are now 0.8 and 1
 - check_scripts/check_policy_passwordcomplexity.ps1. Removed unnecessary condition.
+- check_scripts/1c_db_check.ps1. Updated logic.
 
 ## [1.6.4] - 2023-04-06
 
