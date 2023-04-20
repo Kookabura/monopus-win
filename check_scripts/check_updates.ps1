@@ -77,12 +77,27 @@ try
 	else
 	{
 		$err = "Windows Search"
-		$state = 1
 		
 		try
 		{
-			$lastUpdate = Get-Date ((Get-WmiObject -Class win32_quickfixengineering | Sort-Object -Descending -Property InstalledOn | select -first 1).InstalledOn).Date
-			$daysSinceLastUpdate = (New-TimeSpan -Start $lastUpdate -End (Get-Date)).Days
+			$lastUpdate = wmic qfe list | ForEach-Object -Process {
+				# Here we find the substring with the date and then transform it to format MM-dd-yyyy    
+                if ($_ -match '\d{1,2}\/\d{1,2}\/\d{4}') {
+                    $s = $Matches[0]
+                    $arr = $s -split '/'
+                    if ($arr[0].Length -lt 2) {
+                        $arr[0] = '0' + $arr[0]
+                    }
+                    if ($arr[1].Length -lt 2) {
+                        $arr[1] = '0' + $arr[1]
+                    }
+                    $s = $arr -join '-'
+                    New-Object -TypeName PSObject -Property @{
+		                InstalledOn = [datetime]::ParseExact($s,'MM-dd-yyyy',$null);
+	                }
+                }
+            } | Sort-Object -Descending -Property InstalledOn | select -first 1
+			$daysSinceLastUpdate = (New-TimeSpan -Start $lastUpdate.InstalledOn -End (Get-Date)).Days
 			
 			if ($daysSinceLastUpdate -gt $W -and $daysSinceLastUpdate -lt $C)
 			{
@@ -99,6 +114,7 @@ try
 		catch
 		{ 
 			Write-Host $_ -ForegroundColor Red 
+            $state = 3
 		}
 	}
 }
