@@ -30,7 +30,7 @@ try
 
 	#Получаем список сессий
 	$sessions = $connect1c.GetSessions($cluster1c[0]) #.durationCurrent #[0]
-    $DB_call_time = $connect1c.GetWorkingProcesses($cluster1c[0]).AvgDBCallTime
+    $DB_call_time = ($connect1c.GetWorkingProcesses($cluster1c[0]).AvgDBCallTime | measure -Maximum).Maximum
     $DB_call_time = [math]::Round($DB_call_time, 2)
 
     if ($DB_call_time -ge $W -and $DB_call_time -lt $C) {

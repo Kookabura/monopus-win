@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- check_scripts/1c_db_check.ps1. Fixed multiple processes error.
+
 ### Changed
 
 - check_scripts/1c_db_check.ps1. Added warning and critical values. Defaults are now 0.8 and 1
