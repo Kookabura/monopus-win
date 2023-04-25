@@ -5,7 +5,8 @@ Param
 )
 $states_text = @('ok', 'warning', 'critical', 'unknown')
 $state = 3
-$d = ""
+$storageError = ""
+$taskError = ""
 
 try
 {
@@ -13,31 +14,41 @@ try
 	{
 		$deviceID = (gwmi win32_volume | Where-Object {$_.Name -eq $disk + ":\"}).deviceID
 		$deviceID = $deviceID.TrimStart("\\?\")
+		$taskDeviceID = $deviceID.TrimStart("Volume").TrimEnd("\")
 		$deviceID = "Win32_Volume.DeviceID=`"\\\\?\\" + $deviceID + "\`""
 		$shadowQuery = gwmi win32_shadowstorage | Where-Object {$_.Volume -eq $deviceID}
 		
 		if (!$shadowQuery)
 		{
-            $d += $disk + ", "
+			$storageError += $disk + ", "
 		}
+
+		$shadowTask = Get-ScheduledTask -TaskName "ShadowCopyVolume$($taskDeviceID)" -ErrorAction SilentlyContinue
+
+		if (!$shadowTask)
+		{
+			$taskError += $disk + ", "
+		}
+
 	}
 	
-    if ($d)
-    {
+	if ($storageError -or $taskError)
+	{
 		$state = 1
-    }
+	}
 	else
 	{
 		$state = 0
-    }
+	}
 }
 catch
 {
-    Write-Host $_ -ForegroundColor Red
+	Write-Host $_ -ForegroundColor Red
 }
 
-$d = $d.TrimEnd(", ")
+$storageError = $storageError.TrimEnd(", ")
+$taskError = $taskError.TrimEnd(", ")
 
-$output = "check_shadow_copy.$($states_text[$state])::disks==$d"
+$output = "check_shadow_copy.$($states_text[$state])::storage==$($storageError)__task==$($taskError)"
 Write-Output $output
 exit $state
