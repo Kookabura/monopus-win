@@ -1,8 +1,8 @@
 ﻿[CmdletBinding()]
 Param(
-    [Parameter()][int32]$period = 10,
-    [Parameter()][int32]$W = 0,
-    [Parameter()][int32]$C = 10
+    [Parameter()][float]$W = 0.8,
+    [Parameter()][float]$C = 1,
+    [Parameter()][int32]$period = 10
 )
 
 $t = $host.ui.RawUI.ForegroundColor
@@ -14,6 +14,8 @@ $platform1c_obj = "V83.COMConnector"
 $agent1c_connection = "192.168.10.11"   #192.168.10.10/bd_test, 192.168.10.11/bd_test
 #$ErrorActionPreference = "SilentlyContinue"
 $state = 0
+
+$perfdata = ""
 
 try
 {
@@ -28,7 +30,16 @@ try
 
 	#Получаем список сессий
 	$sessions = $connect1c.GetSessions($cluster1c[0]) #.durationCurrent #[0]
-    $DB_call_time = $connect1c.GetWorkingProcesses($cluster1c[0]).AvgDBCallTime
+    $DB_call_time = ($connect1c.GetWorkingProcesses($cluster1c[0]).AvgDBCallTime | measure -Maximum).Maximum
+    $DB_call_time = [math]::Round($DB_call_time, 2)
+
+    if ($DB_call_time -ge $W -and $DB_call_time -lt $C) {
+        $state = 1
+    } elseif ($DB_call_time -ge $C) {
+        $state = 2
+    }
+
+    $perfdata = "db_call_time=$($DB_call_time);;;;"
 }
 catch
 {
@@ -38,7 +49,7 @@ catch
 
 
 
-$output = "1c_db_check.$($states_text[$state])::db_call_time==$([math]::Round($DB_call_time, 2)) | db_call_time=$([math]::Round($DB_call_time, 2));;;;"
+$output = "1c_db_check.$($states_text[$state])::db_call_time==$DB_call_time | $($perfdata)
 
 $host.ui.RawUI.ForegroundColor = $($state_colors[$state])
 Write-Output $output
