@@ -4,6 +4,6 @@
     'scripts_path': 'C:\\Program Files (x86)\\MonOpus\\check_scripts\\',
     'installation_path': 'C:\\Program Files (x86)\\MonOpus\\',
 	"timeout":"30",
-    'version': '1.6.4',
+    'version': '1.6.5',
     'task_name': "Monitoring"
 }

@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+## [1.6.5]
+
 ### Fixed
 
 - check_scripts/1c_db_check.ps1. Fixed multiple processes error.
