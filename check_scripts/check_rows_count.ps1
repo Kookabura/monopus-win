@@ -3,7 +3,7 @@ Param(
 	[Parameter(Mandatory=$true)][string]$SqlServer,
 	[Parameter(Mandatory=$true)][string]$SqlDatabase,
 	[Parameter(Mandatory=$true)][string]$CommandText,
-	[Parameter()][int32]$W,
+	[Parameter()][int32]$W = $null,
 	[Parameter()][int32]$C
 )
 
@@ -29,7 +29,7 @@ try
 		{
 			$state = 2
 		}
-		elseif ($n -gt $W)
+		elseif ($W -and $n -gt $W)
 		{
 			$state = 1
 		}
