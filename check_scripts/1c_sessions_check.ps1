@@ -44,7 +44,7 @@ try
         }
     }
 	
-    $all_sessions_count = [int]$sessions.Count
+    $all_sessions_count = [int]$sessions.Count - $BackgroundJob 
 	
 	if ($all_sessions_count -gt $W)
 	{
@@ -66,3 +66,5 @@ $output = "1c_sessions_check.$($states_text[$state])::all_sessions_count==$($all
 
 Write-Output $output
 exit $state
+
+

@@ -11,7 +11,7 @@ $err = ""
 
 try
 {
-	if ((Get-Service 'WSearch').Status -like "Running")
+	if ((Get-Service 'wuauserv').starttype -ne "Disabled")
 	{
         try
         {
@@ -76,7 +76,7 @@ try
 	}
 	else
 	{
-		$err = "Windows Search"
+		$err = "Windows Update"
 		
 		try
 		{

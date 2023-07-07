@@ -49,7 +49,7 @@ catch
 
 
 
-$output = "1c_db_check.$($states_text[$state])::db_call_time==$DB_call_time | $($perfdata)
+$output = "1c_db_check.$($states_text[$state])::db_call_time==$DB_call_time | $($perfdata)"
 
 $host.ui.RawUI.ForegroundColor = $($state_colors[$state])
 Write-Output $output
