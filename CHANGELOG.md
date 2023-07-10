@@ -6,6 +6,20 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+## [1.6.6]
+
+### Added
+
+- check_scripts/check_files_in_folder.ps1 added new script
+- check_scripts/check_location.ps1 added new script
+- check_scripts/check_rows_count.ps1 added new script
+
+### Changed
+
+- check_scripts/1c_db_check.ps1 updated
+- check_scripts/1c_sessions_check.ps1 remove background tasks
+- check_scripts/check_updates.ps1 replaced wsearch to wuaserv 
+
 ## [1.6.5]
 
 ### Fixed
