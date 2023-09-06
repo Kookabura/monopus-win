@@ -2,31 +2,33 @@
 Param(
     [Parameter()][int32]$period = 10,
     [Parameter()][int32]$W = 95,
-    [Parameter()][int32]$C = 100
+    [Parameter()][int32]$C = 100,
+    [Parameter(Mandatory=$true)][string]$server
 )
 
 $states_text = @('ok', 'warning', 'critical', 'unknown')
 
 $platform1c_obj = "V83.COMConnector"
-#$service1c_name =  "1C:Enterprise 8.3 Server Agent*"
-$agent1c_connection = "192.168.10.11"   #192.168.10.10/bd_test, 192.168.10.11/bd_test
-#$ErrorActionPreference = "SilentlyContinue"
 $state = 0
 $unicUser = @()
 $BackgroundJob = 0
 
 try
 {
-    #regsvr32 "c:\Program Files\1cv8\8.3.21.1624\bin\comcntr.dll" IInfoBaseConnectionInfo.durationAllDBMS
+    try {
+        $comobj1c = New-Object -ComObject $platform1c_obj			#Создаем COM объект 1С
+    } catch {
+        $comDllPath = Get-ChildItem -Path "c:\Program Files" -Filter "comcntr.dll" -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notmatch 'C:\\Program Files\\Microsoft Azure Recovery Services Agent\\Scratch\\SSBV' } | Select-Object -ExpandProperty FullName -last 1
 
-	$comobj1c = New-Object -ComObject $platform1c_obj			#Создаем COM объект 1С
-	$connect1c = $comobj1c.ConnectAgent($agent1c_connection)	#Подключаемя к агенту сервера 1С
+        $regsvr32Output = regsvr32.exe /s $comDllPath           # Если библиотека не зарегистрирована - регистрируем её
+        $comobj1c = New-Object -ComObject $platform1c_obj
+    }
 
+	$connect1c = $comobj1c.ConnectAgent($server)
 
-	$cluster1c = $connect1c.GetClusters()						#Получаем доступные кластеры на данном сервере
-	$connect1c.Authenticate($cluster1c[0],"","")				#Подключаемся к кластеру; При условии что кластер только один, тоесть выбираем первый - [0]
+	$cluster1c = $connect1c.GetClusters()
+	$connect1c.Authenticate($cluster1c[0],"","")
 
-	#Получаем список сессий
 	$sessions = $connect1c.GetSessions($cluster1c[0]) #.durationCurrent #[0]
 
     foreach ($session in $sessions)
