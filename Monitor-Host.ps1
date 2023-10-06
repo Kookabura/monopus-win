@@ -105,6 +105,10 @@ function Monitor-Host {
                     Write-Verbose "$(get-date) Handling service $key"
            
                     $parameters = @{}
+                    if ($PSCmdlet.MyInvocation.BoundParameters["Verbose"].IsPresent) {
+                        $parameters['verbose'] = $true
+                    }
+
                     if($services[$key].warning) {
                         $parameters['w'] = $services[$key].warning
                     }
@@ -153,6 +157,7 @@ function Monitor-Host {
 							$result = 'check_timeout_on_client'
                             #$job.Stop()
                         } else {
+                            Write-Verbose "$(get-date) Job verbose output $($job.Streams.Verbose)"
                             if ($job.HadErrors -and $job.Streams.Error) {
                                 Write-Verbose "$(get-date) Job finished with error $($job.Streams.Error)"
                             }
@@ -237,4 +242,6 @@ function Monitor-Host {
 }
 
 #requires -Version 3.0
-Monitor-Host # Add for logging: -Verbose *>> "$PSScriptRoot\log.log"
+Monitor-Host  -Verbose *>> "$PSScriptRoot\log.log"# Add for logging: -Verbose *>> "$PSScriptRoot\log.log"
+
+
