@@ -44,3 +44,4 @@ $host.ui.RawUI.ForegroundColor = $($state_colors[$state])
 Write-Output $output
 $host.ui.RawUI.ForegroundColor = $t
 exit $state
+

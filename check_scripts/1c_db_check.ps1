@@ -3,7 +3,7 @@ Param(
     [Parameter()][float]$W = 0.8,
     [Parameter()][float]$C = 1,
     [Parameter()][int32]$period = 10,
-    [Parameter(Mandatory=$true)][string]$server
+    [Parameter][string]$server = 'localhost'
 )
 
 $t = $host.ui.RawUI.ForegroundColor
@@ -58,4 +58,5 @@ $host.ui.RawUI.ForegroundColor = $($state_colors[$state])
 Write-Output $output
 $host.ui.RawUI.ForegroundColor = $t
 exit $state
+
 
