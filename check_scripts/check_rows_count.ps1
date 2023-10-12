@@ -1,8 +1,8 @@
 [CmdletBinding()]
 Param(
-	[Parameter(Mandatory=$true)][string]$S,
-	[Parameter(Mandatory=$true)][string]$D,
-	[Parameter(Mandatory=$true)][string]$Q,
+	[Parameter(Mandatory=$true)][string]$SqlServer,
+	[Parameter(Mandatory=$true)][string]$SqlDatabase,
+	[Parameter(Mandatory=$true)][string]$CommandText,
 	[Parameter()][int32]$W = $null,
 	[Parameter()][int32]$C
 )
@@ -15,10 +15,10 @@ $state = 0
 try
 {
 	$SqlConnection = New-Object System.Data.SqlClient.SqlConnection
-	$SqlConnection.ConnectionString = "Server=$S; Database=$D; Integrated Security=True"
+	$SqlConnection.ConnectionString = "Server=$SqlServer; Database=$SqlDatabase; Integrated Security=True"
     $SqlConnection.Open()
 	$SqlCmd = $SqlConnection.CreateCommand()
-	$SqlCmd.CommandText = $Q
+	$SqlCmd.CommandText = $CommandText
 	$objReader = $SqlCmd.ExecuteReader()
 
 	while ($objReader.read())
@@ -44,7 +44,7 @@ catch
 	$state = 3
 }
 
-$output = "check_rows_count.$($states_text[$state])::counted==$n | counted=$n;;;"
+$output = "check_null_sql_data.$($states_text[$state])::counted==$n | counted=$n;;;"
 
 $host.ui.RawUI.ForegroundColor = $($state_colors[$state])
 Write-Output $output
