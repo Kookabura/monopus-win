@@ -3,7 +3,7 @@ Param(
     [Parameter()][int32]$period = 10,
     [Parameter()][int32]$W = 95,
     [Parameter()][int32]$C = 100,
-    [Parameter][string]$server = 'localhost'
+    [Parameter()][string]$server = 'localhost'
 )
 
 $states_text = @('ok', 'warning', 'critical', 'unknown')

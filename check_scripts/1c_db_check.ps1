@@ -3,7 +3,7 @@ Param(
     [Parameter()][float]$W = 0.8,
     [Parameter()][float]$C = 1,
     [Parameter()][int32]$period = 10,
-    [Parameter][string]$server = 'localhost'
+    [Parameter()][string]$server = 'localhost'
 )
 
 $t = $host.ui.RawUI.ForegroundColor

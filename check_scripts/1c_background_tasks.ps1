@@ -3,7 +3,7 @@ Param(
     [Parameter()][int32]$period = 10,
     [Parameter()][int32]$W = 0,
     [Parameter()][int32]$C = 10,
-    [Parameter][string]$server = 'localhost',
+    [Parameter()][string]$server = 'localhost',
     [Parameter(Mandatory=$true)][string]$base_name
 )
 
