@@ -8,7 +8,7 @@ Param(
 )
 
 $t = $host.ui.RawUI.ForegroundColor
-$states_text = @('ok', 'warning', 'critical', 'unknown')
+$states_text = @('ok', 'warn', 'critical', 'unknown')
 $state_colors = @('Green', 'Yellow', 'Red', 'DarkGray')
 $state = 0
 
@@ -44,7 +44,7 @@ catch
 	$state = 3
 }
 
-$output = "check_null_sql_data.$($states_text[$state])::counted==$n | counted=$n;;;"
+$output = "check_rows_count.$($states_text[$state])::counted==$n | counted=$n;;;"
 
 $host.ui.RawUI.ForegroundColor = $($state_colors[$state])
 Write-Output $output
