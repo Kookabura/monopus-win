@@ -120,7 +120,7 @@ function Monitor-Host {
                         $tmp.RemoveAt(0)
                         foreach ($p in $tmp) {
                              $a = $p.trim() -split " ",2
-                             if ($a[1] -match ',' -and $a[0] -ne "InterfaceName") {
+                             if ($a[1] -match ',' -and $a[0] -notmatch "InterfaceName|CommandText") {
                                 $value = $a[1] -split ','
                              } else {
                                 $value = $a[1]
