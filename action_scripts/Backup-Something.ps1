@@ -1,3 +1,56 @@
+function Remove-OldFiles {
+    param (
+        [string]$TargetDir,
+        [hashtable]$RetainPolicy,
+        [string]$BaseName,
+        [string]$LogFile
+    )
+
+    $policy_arr = $RetainPolicy.GetEnumerator()
+    foreach ($policy in $policy_arr) {
+        Write-Verbose "Checking retain policy $($policy.name) for retain copies. Threshold is $($policy.value['retainCopies'])"
+        $numberOfCopies = (ls ((Join-Path $TargetDir $policy.name) + '\*') -Include ($BaseName + '_*' + $policy.name + '*')).count
+        Write-Verbose "Number of copies is in asset is $numberOfCopies"
+        
+        if ($numberOfCopies -gt ($retainCopies = $policy.value['retainCopies'])) {
+            Write-Verbose "Number of copies in $($policy.name) set is greater than $($policy.value['retainCopies']). Start cleaning..."
+
+            $iterations = $numberOfCopies - $retainCopies
+            $backupSets = ls ((Join-Path $TargetDir $policy.name) + '\*') -Include ($BaseName + '_*' + $policy.name + '*') | ? {$_.LastWriteTime -lt (get-date).AddDays(-$policy.value['retainDays'])} | sort lastwritetime
+            
+            Write-Verbose (ConvertTo-Json $backupSets)
+            
+            if ($backupSets) {
+                for ($i=0;$i -lt $iterations;$i++) {
+                    if ($backupSets[$i]) {
+                        $backupSets[$i] | rm
+                        if ($LogFile) {
+                            ((get-date -format 'dd.MM.yy HH:mm:ss: ') + 'Удален файл - ' + $backupSets[$i].name) | Out-File $LogFile -Encoding unicode -Append
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+function Create-BackupDirectory {
+    Param (
+        [string]$Path,
+        [string]$PolicyName
+    )
+    
+    $fullPath = Join-Path $Path $PolicyName
+    if (!(Test-Path $fullPath)) {
+        try {
+            New-Item -Path $fullPath -ItemType Directory -ErrorAction Stop | Out-Null
+        } catch {
+            Write-Host "Failed to create directory: $_"
+            throw "Error on creating backup repositories"
+        }
+    }
+}
+
 function Handle-BackupSet {
     [CmdletBinding()]
     Param (
@@ -14,9 +67,10 @@ function Handle-BackupSet {
 			}
 		},
 		[string]$LogFile,
+        [string]$Encrypt = '',
 		[string]$Password,
-		[boolean]$Compress = $false,
-		[boolean]$Encrypt = $false
+		[boolean]$Compress = $false
+		
     )
 
     Begin {
@@ -36,11 +90,9 @@ function Handle-BackupSet {
         }
 
         foreach ($policy_name in $RetainPolicy.keys) {
-            if (!(test-path (Join-Path $TargetPath $policy_name))) {
-                mkdir (Join-Path $TargetPath $policy_name) | Out-Null
-                if ($LASTEXITCODE) {
-                    throw "Error on creating backup repositories"
-                }
+            Create-BackupDirectory -Path $TargetPath -PolicyName $policy_name
+            if ($Encrypt) {
+                Create-BackupDirectory -Path $Encrypt -PolicyName $policy_name
             }
         }
 
@@ -48,94 +100,91 @@ function Handle-BackupSet {
     }
 
     Process {
-        # Перемещаем копии на сетевое хранилище
-
         $dtarget = "$TargetPath\daily\$($tmpfile.basename)_daily_$($date.ToString('ddMMHHmmss'))$($tmpfile.extension)"
         
-        if (($tmpfile.fullname -split ':\\')[0] -eq ($dtarget -split ':\\')[0] -and ($tmpfile.Extension -eq '.zip' -or !$compress)) {
-            # Если в рамках одного диска
+        if (($tmpfile.fullname -split ':\\')[0] -eq ($dtarget -split ':\\')[0] -and ($tmpfile.Extension -eq '.zip' -or (!$Compress -and [string]::IsNullOrWhiteSpace($Encrypt)))) {
             cmd /c mklink /H "$dtarget" "$($tmpfile.fullname)" | Out-Null
+            Write-Verbose 'NO Compress or Encrypt'
         } else {
-            # Если диски разные
-            # TO DO Сжимать до копирования. Так быстрее должно быть.
-            if ($compress) {
-				
-				$dtarget = "$dtarget.zip"
-				
-				if ($Encrypt) {
-					if ($Password.Length -eq 0) {Write-Warning "Encryption is carried out without a password!"}
-					EncryptGzip-File -InputFile $tmpfile.fullname -OutputFile $dtarget -Password $Password
-				} else {
-					Add-Type -assembly 'System.IO.Compression'
-					Add-Type -assembly 'System.IO.Compression.FileSystem'
-					
-					[System.IO.Compression.ZipArchive]$ZipFile = [System.IO.Compression.ZipFile]::Open($dtarget, ([System.IO.Compression.ZipArchiveMode]::Create))
-					[System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($ZipFile, $tmpfile.fullname, (Split-Path $tmpfile.fullname -Leaf)) | out-null
-					$ZipFile.Dispose()
-				}
-            } else {
-                cp $tmpfile.fullname $dtarget
-            }
-        }
+            if ($Compress -or ![string]::IsNullOrWhiteSpace($Encrypt)) {
+                Write-Verbose 'Compress or Encrypt'
+        
+                $dtarget = "$dtarget.zip"
 
-        # Откладываем копию в еженедельный архив
-        if ($RetainPolicy['weekly']) {
-            $isMonthlyCopyExists = (ls ($TargetPath + '\weekly\*') -Include ($tmpfile.basename + '_weekly*') | ? {$_.lastwritetime -gt (Get-Date -hour 0 -minute 0 -second 0).AddDays(-7)}).count
-            if (!$isMonthlyCopyExists) {
-                $hardlink = "$TargetPath\weekly\" + ((Split-Path $dtarget -Leaf) -replace 'daily', 'weekly')
-                if ([bool]([System.Uri]$TargetPath).IsUnc) {
-                    # TO DO: just copy if it is unc path
-                    Write-Verbose "Copiyng file to weekly repo"
-                    cp $dtarget $hardlink
-                } else {
-                    Write-Verbose "Creating hard link $hardlink from $dtarget"
-                    cmd /c mklink /H "$hardlink" "$dtarget" | Out-Null
-                }
-            }
-        }
+                Write-Verbose "Compressing file"
+                Add-Type -assembly 'System.IO.Compression'
+                Add-Type -assembly 'System.IO.Compression.FileSystem'
+        
+                [System.IO.Compression.ZipArchive]$ZipFile = [System.IO.Compression.ZipFile]::Open($dtarget, ([System.IO.Compression.ZipArchiveMode]::Create))
+                [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($ZipFile, $tmpfile.fullname, (Split-Path $tmpfile.fullname -Leaf)) | Out-Null
+                $ZipFile.Dispose()
 
-        # Откладываем копию в ежемесячный архив
-        if ($RetainPolicy['monthly']) {
-            $isMonthlyCopyExists = (ls ($TargetPath + '\monthly\*') -Include ($tmpfile.basename + '_monthly*') | ? {$_.lastwritetime -gt (Get-Date -day 1 -hour 0 -minute 0 -second 0)}).count
-            if (!$isMonthlyCopyExists) {
-                $hardlink = "$TargetPath\monthly\" + ((Split-Path $dtarget -Leaf) -replace 'daily', 'monthly')
-                if ([bool]([System.Uri]$TargetPath).IsUnc) {
-                    # TO DO: just copy if it is unc path
-                    Write-Verbose "Copiyng file to monthly repo"
-                    cp $dtarget $hardlink
-                } else {
-                    Write-Verbose "Creating hard link $hardlink from $dtarget"
-                    cmd /c mklink /H "$hardlink" "$dtarget" | Out-Null
-                }
-            }
-        }
-
-        # Удаляем старые копии
-        $policy_arr = $retainPolicy.GetEnumerator()
-        foreach ($policy in $policy_arr) {
-            Write-Verbose "Checking retain policy $($policy.name) for retain copies. Threshold is $($policy.value['retainCopies'])"
-            $numberOfCopies = (ls ((Join-Path $TargetPath $policy.name) + '\*') -Include ($tmpfile.basename + '_*' + $policy.name + '*')).count
-            Write-Verbose "Number of copies is in asset is $numberOfCopies"
+                if (![string]::IsNullOrWhiteSpace($Encrypt)) {
+                    if ($Password.Length -eq 0) {
+                        Write-Warning "Encryption is carried out without a password!"
+                    }
             
-            if ($numberOfCopies -gt ($retainCopies = $policy.value['retainCopies'])) {
-                Write-Verbose "Number of copies in $($policy.name) set is greater than $($policy.value['retainCopies']). Strat cleaning..."
+                    Write-Verbose "Encrypting compressed file"
+                    $dtargetEncrypt = "$Encrypt\daily\$($tmpfile.basename)_daily_$($date.ToString('ddMMHHmmss'))$($tmpfile.extension).zip"
+                    EncryptGzip-File -InputFile $dtarget -OutputFile $dtargetEncrypt -Password $Password
+                } 
 
-                $iterations = $numberOfCopies - $retainCopies
-                $backupSets = ls ((Join-Path $TargetPath $policy.name) + '\*') -Include ($tmpfile.basename + '_*' + $policy.name + '*') | ? {$_.LastWriteTime -lt (get-date).AddDays(-$policy.value['retainDays'])} | sort lastwritetime
-                
-                Write-Verbose (ConvertTo-Json $backupSets)
-                
-                if ($backupSets) {
-                    for ($i=0;$i -lt $iterations;$i++) {
-                        if ($backupSets[$i]) {
-                            $backupSets[$i] | rm
-                            if ($LogFile) {
-                                ((get-date -format 'dd.MM.yy HH:mm:ss: ') + 'Удален файл - ' + $backupSets[$i].name) | Out-File $logFile -Encoding unicode -Append
-                            }
-                        }
+                if (-not $Compress) {
+                    Write-Verbose "Removing temporary compressed file"
+                    Remove-Item $dtarget
+                }
+
+            } else {
+                Copy-Item $tmpfile.fullname $dtarget
+            }
+        }
+
+
+        $paths = @()
+        if ($Compress -or [string]::IsNullOrWhiteSpace($Encrypt)) {
+            $paths += $TargetPath
+        }
+
+        if (![string]::IsNullOrWhiteSpace($Encrypt)) {
+            $paths += $Encrypt
+        }
+
+        foreach ($path in $paths) {
+            $dtarget = "$path\daily\$($tmpfile.basename)_daily_$($date.ToString('ddMMHHmmss'))$($tmpfile.extension)"
+
+            if ($Compress -or ![string]::IsNullOrWhiteSpace($Encrypt)) {
+                $dtarget = "$dtarget.zip"
+            }
+
+            if ($RetainPolicy['weekly']) {
+                $isMonthlyCopyExists = (ls ($path + '\weekly\*') -Include ($tmpfile.basename + '_weekly*') | ? {$_.lastwritetime -gt (Get-Date -hour 0 -minute 0 -second 0).AddDays(-7)}).count
+                if (!$isMonthlyCopyExists) {
+                    $hardlink = "$path\weekly\" + ((Split-Path $dtarget -Leaf) -replace 'daily', 'weekly')
+                    if ([bool]([System.Uri]$path).IsUnc) {
+                        Write-Verbose "Copiyng file to weekly repo"
+                        cp $dtarget $hardlink
+                    } else {
+                        Write-Verbose "Creating hard link $hardlink from $dtarget"
+                        cmd /c mklink /H "$hardlink" "$dtarget" | Out-Null
                     }
                 }
             }
+
+            if ($RetainPolicy['monthly']) {
+                $isMonthlyCopyExists = (ls ($path + '\monthly\*') -Include ($tmpfile.basename + '_monthly*') | ? {$_.lastwritetime -gt (Get-Date -day 1 -hour 0 -minute 0 -second 0)}).count
+                if (!$isMonthlyCopyExists) {
+                    $hardlink = "$path\monthly\" + ((Split-Path $dtarget -Leaf) -replace 'daily', 'monthly')
+                    if ([bool]([System.Uri]$path).IsUnc) {
+                        Write-Verbose "Copiyng file to monthly repo"
+                        cp $dtarget $hardlink
+                    } else {
+                        Write-Verbose "Creating hard link $hardlink from $dtarget"
+                        cmd /c mklink /H "$hardlink" "$dtarget" | Out-Null
+                    }
+                }
+            }
+
+            Remove-OldFiles -TargetDir $path -RetainPolicy $RetainPolicy -BaseName $tmpfile.basename -LogFile $LogFile
         }
 
         if (!$LASTEXITCODE) {
@@ -147,8 +196,6 @@ function Handle-BackupSet {
     }
 }
 
-
-#функция шифрования
 function EncryptGzip-File
 {
 	[CmdletBinding()]
@@ -165,35 +212,27 @@ function EncryptGzip-File
 	$Prng = New-Object System.Security.Cryptography.RNGCryptoServiceProvider
 	$Prng.GetBytes($Salt)
 
-	# Derive random bytes using PBKDF2 from Salt and Password
 	$PBKDF2 = New-Object System.Security.Cryptography.Rfc2898DeriveBytes($Password, $Salt)
-
-	# Get our AES key, iv and hmac key from the PBKDF2 stream
 	$AESKey  = $PBKDF2.GetBytes(32)
 	$AESIV   = $PBKDF2.GetBytes(16)
 
-	# Setup our encryptor
 	$AES = New-Object Security.Cryptography.AesManaged
 	$Enc = $AES.CreateEncryptor($AESKey, $AESIV)
 
-	# Write our Salt now, then append the encrypted data
 	$OutputStream.Write($Salt, 0, $Salt.Length)
 
 	$CryptoStream = New-Object System.Security.Cryptography.CryptoStream($OutputStream, $Enc, [System.Security.Cryptography.CryptoStreamMode]::Write)
-	$GzipStream = New-Object System.IO.Compression.GZipStream($CryptoStream, [IO.Compression.CompressionMode]::Compress)
 
-	$InputStream.CopyTo($GzipStream)
+	$InputStream.CopyTo($CryptoStream)
 	
 	$InputStream.Flush()
-	$GzipStream.Flush()
+	$CryptoStream.Flush()
 	$OutputStream.Flush()
 	$InputStream.Close()
-	$GzipStream.Close()
+	$CryptoStream.Close()
 	$OutputStream.Close()
 }
 
-
-# функция расшифровки
 function DecryptGzip-File
 {
 	[CmdletBinding()]
@@ -206,40 +245,34 @@ function DecryptGzip-File
 	$InputStream = New-Object IO.FileStream($InputFile, [IO.FileMode]::Open, [IO.FileAccess]::Read)
 	$OutputStream = New-Object IO.FileStream($OutputFile, [IO.FileMode]::Create, [IO.FileAccess]::Write)
 
-	# Read the Salt
 	$Salt = New-Object Byte[](32)
 	$BytesRead = $InputStream.Read($Salt, 0, $Salt.Length)
-	if ( $BytesRead -ne $Salt.Length )
+	if ($BytesRead -ne $Salt.Length)
 	{
 		Write-Host 'Failed to read Salt from file'
 		exit
 	}
 
-	# Generate PBKDF2 from Salt and Password
 	$PBKDF2 = New-Object System.Security.Cryptography.Rfc2898DeriveBytes($Password, $Salt)
-
-	# Get our AES key, iv and hmac key from the PBKDF2 stream
 	$AESKey  = $PBKDF2.GetBytes(32)
 	$AESIV   = $PBKDF2.GetBytes(16)
 
-	# Setup our decryptor
 	$AES = New-Object Security.Cryptography.AesManaged
 	$Decryptor = $AES.CreateDecryptor($AESKey, $AESIV)
 
 	$CryptoStream = New-Object System.Security.Cryptography.CryptoStream($InputStream, $Decryptor, [System.Security.Cryptography.CryptoStreamMode]::Read)
-	$GzipStream = New-Object System.IO.Compression.GZipStream($CryptoStream, [IO.Compression.CompressionMode]::Decompress)
 	
-	$GzipStream.CopyTo($OutputStream)
+	$CryptoStream.CopyTo($OutputStream)
 	
 	$InputStream.Flush()
-	$GzipStream.Flush()
+	$CryptoStream.Flush()
 	$OutputStream.Flush()
 	$InputStream.Close()
-	$GzipStream.Close()
+	$CryptoStream.Close()
 	$OutputStream.Close()
 }
 
-# Бекап микротика
+# Р‘РµРєР°Рї РјРёРєСЂРѕС‚РёРєР°
 function Backup-Mikrotik {
     [CmdletBinding()]
     Param (
@@ -293,7 +326,7 @@ function Backup-Mikrotik {
 }
 
 
-# Бекап SQL
+# Р‘РµРєР°Рї SQL
 function Backup-SQLDatabase {
     [CmdletBinding()]
     Param (
@@ -324,12 +357,12 @@ function Backup-SQLDatabase {
         $srv.ConnectionContext.StatementTimeout = 0
         $date = Get-Date
 
-        # Существует ли папка для бекапа
+        # РЎСѓС‰РµСЃС‚РІСѓРµС‚ Р»Рё РїР°РїРєР° РґР»СЏ Р±РµРєР°РїР°
         if (!(Test-Path $path)) {
             throw "Backup path $path not found. Cannot proccess backup."
         }
 
-        # Удаляем копию, если она уже есть
+        # РЈРґР°Р»СЏРµРј РєРѕРїРёСЋ, РµСЃР»Рё РѕРЅР° СѓР¶Рµ РµСЃС‚СЊ
         if ($type -eq "Database") {
             $path = $Path + $database + '_full' + '.bak'
         } elseif ($type -eq "log") {
@@ -483,26 +516,26 @@ function Remove-ShadowLink {
 }
 
 
-#####===== Бекап папок =====#####
+#####===== Р‘РµРєР°Рї РїР°РїРѕРє =====#####
 function Execute-BackupFolders
 {
     [CmdletBinding()]
     param (
-		[Parameter(Mandatory=$true, ValueFromPipeline=$true)][string[]]$Folders, # перечисление папок для бекапа
-		[Parameter(Mandatory=$true, ValueFromPipeline=$true)][string]$BackupTempLocation, # временное хранилище копий
-		[Parameter(Mandatory=$true)][string]$BackupSetsLocation, # хранилище бекапов
+		[Parameter(Mandatory=$true, ValueFromPipeline=$true)][string[]]$Folders, # РїРµСЂРµС‡РёСЃР»РµРЅРёРµ РїР°РїРѕРє РґР»СЏ Р±РµРєР°РїР°
+		[Parameter(Mandatory=$true, ValueFromPipeline=$true)][string]$BackupTempLocation, # РІСЂРµРјРµРЅРЅРѕРµ С…СЂР°РЅРёР»РёС‰Рµ РєРѕРїРёР№
+		[Parameter(Mandatory=$true)][string]$BackupSetsLocation, # С…СЂР°РЅРёР»РёС‰Рµ Р±РµРєР°РїРѕРІ
 		[string]$LogFile,
 		[string]$Password,
 		[boolean]$Compress,
 		[boolean]$Encrypt
     )
 	
-	# Создаем теневые копии для дисков, на которых находятся папки
+	# РЎРѕР·РґР°РµРј С‚РµРЅРµРІС‹Рµ РєРѕРїРёРё РґР»СЏ РґРёСЃРєРѕРІ, РЅР° РєРѕС‚РѕСЂС‹С… РЅР°С…РѕРґСЏС‚СЃСЏ РїР°РїРєРё
 	Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Starting folders backup job..."
 	$volumes = @()
 	$shadows = @{}
 	foreach ($folder in $Folders) {
-		# Получаем диск папки
+		# РџРѕР»СѓС‡Р°РµРј РґРёСЃРє РїР°РїРєРё
 		$volume = Split-Path $folder -Qualifier
 		if ($volumes -notcontains $volume) {
 			Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Creating shadow copy for volume $volume..."
@@ -518,17 +551,17 @@ function Execute-BackupFolders
 		}
 	}
 
-	# Бекапим данные из теневой копии
+	# Р‘РµРєР°РїРёРј РґР°РЅРЅС‹Рµ РёР· С‚РµРЅРµРІРѕР№ РєРѕРїРёРё
 	foreach ($folder in $Folders) {
 		Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Backing up $folder to temp location $BackupTempLocation"
 		if (!(Test-Path $BackupTempLocation)) {
 			mkdir $BackupTempLocation
 		}
 		try {
-			# Бекапим папку
+			# Р‘РµРєР°РїРёРј РїР°РїРєСѓ
 			$file = Backup-Folder -Folder (Join-Path $shadowpath (Split-Path $folder -NoQualifier)) -BackupPath $BackupTempLocation
 
-			#Перемещаем бекап в хранилище
+			#РџРµСЂРµРјРµС‰Р°РµРј Р±РµРєР°Рї РІ С…СЂР°РЅРёР»РёС‰Рµ
 			Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Moving to backup set location and hadling copies count"
 			Handle-BackupSet -SourceFile $file -TargetPath $BackupSetsLocation -RetainPolicy @{'daily' = @{'retainDays' = 7;'retainCopies' = 7}; 'monthly' = @{'retainDays' = 366; 'retainCopies' = 12}} -LogFile $LogFile -Password $Password -Compress $Compress -Encrypt $Encrypt
 			Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Backup is finished successfully."
@@ -537,7 +570,7 @@ function Execute-BackupFolders
 		}
 	}
 
-	# Удаляем теневые копии
+	# РЈРґР°Р»СЏРµРј С‚РµРЅРµРІС‹Рµ РєРѕРїРёРё
 	foreach ($volume in $shadows.keys) {
 		Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Removing shadow copy for volume $volume"
 		Remove-ShadowLink $shadows[$volume]
@@ -545,18 +578,28 @@ function Execute-BackupFolders
 	}
 }
 
-#####===== Бекап баз данных SQL =====#####
+#####===== Р‘РµРєР°Рї Р±Р°Р· РґР°РЅРЅС‹С… SQL =====#####
 function Execute-BackupSQL
 {
 	[CmdletBinding()]
     param (
-		[Parameter(Mandatory=$true, ValueFromPipeline=$true)][string[]]$Databases, # перечисление БД
-		[Parameter(Mandatory=$true, ValueFromPipeline=$true)][string]$BackupTempLocation, # временное хранилище копий
-		[Parameter(Mandatory=$true)][string]$BackupSetsLocation, # хранилище бекапов
+		[Parameter(Mandatory=$true, ValueFromPipeline=$true)][string[]]$Databases, # РїРµСЂРµС‡РёСЃР»РµРЅРёРµ Р‘Р”
+		[Parameter(Mandatory=$true, ValueFromPipeline=$true)][string]$BackupTempLocation, # РІСЂРµРјРµРЅРЅРѕРµ С…СЂР°РЅРёР»РёС‰Рµ РєРѕРїРёР№
+		[Parameter(Mandatory=$true)][string]$BackupSetsLocation, # С…СЂР°РЅРёР»РёС‰Рµ Р±РµРєР°РїРѕРІ
+        [hashtable]$RetainPolicy = @{
+			'daily' = @{
+				'retainDays' = 14;
+				'retainCopies' = 14
+			};
+			'monthly' = @{
+				'retainDays' = 365;
+				'retainCopies' = 12
+			}
+		},
 		[string]$LogFile,
 		[string]$Password,
 		[boolean]$Compress,
-		[boolean]$Encrypt
+		[string]$Encrypt = ''  # path to encrypted files directory
     )
 
 	foreach ($db in $Databases) {
@@ -567,22 +610,22 @@ function Execute-BackupSQL
 		$file = Backup-SQLDatabase -Database $db -Path $BackupTempLocation
 
 		Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Moving to backup set location and hadling copies count..."
-		Handle-BackupSet -SourceFile $file -TargetPath $BackupSetsLocation -RetainPolicy @{'daily' = @{'retainDays' = 7;'retainCopies' = 7}; 'monthly' = @{'retainDays' = 366; 'retainCopies' = 12}} -LogFile $LogFile -Password $Password -Compress $Compress -Encrypt $Encrypt
+		Handle-BackupSet -SourceFile $file -TargetPath $BackupSetsLocation -RetainPolicy $RetainPolicy -LogFile $LogFile -Password $Password -Compress $Compress -Encrypt $Encrypt -Verbose
 
 		Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Backup is finished."
 	}
 }
 
-#####===== Бекап микротика =====##### доделать
+#####===== Р‘РµРєР°Рї РјРёРєСЂРѕС‚РёРєР° =====##### РґРѕРґРµР»Р°С‚СЊ
 function Execute-BackupMikrotik
 {
 	[CmdletBinding()]
     param (
 		[Parameter(Mandatory=$true, ValueFromPipeline=$true)][string]$MHost, # ip
-		[Parameter(Mandatory=$true, ValueFromPipeline=$true)][string]$Login, # Login для микротика
-		[Parameter(Mandatory=$true, ValueFromPipeline=$true)][string]$Pass, # пароль для микротика
-		[Parameter(Mandatory=$true, ValueFromPipeline=$true)][string]$BackupTempLocation, # временное хранилище копий
-		[Parameter(Mandatory=$true)][string]$BackupSetsLocation, # хранилище бекапов
+		[Parameter(Mandatory=$true, ValueFromPipeline=$true)][string]$Login, # Login РґР»СЏ РјРёРєСЂРѕС‚РёРєР°
+		[Parameter(Mandatory=$true, ValueFromPipeline=$true)][string]$Pass, # РїР°СЂРѕР»СЊ РґР»СЏ РјРёРєСЂРѕС‚РёРєР°
+		[Parameter(Mandatory=$true, ValueFromPipeline=$true)][string]$BackupTempLocation, # РІСЂРµРјРµРЅРЅРѕРµ С…СЂР°РЅРёР»РёС‰Рµ РєРѕРїРёР№
+		[Parameter(Mandatory=$true)][string]$BackupSetsLocation, # С…СЂР°РЅРёР»РёС‰Рµ Р±РµРєР°РїРѕРІ
 		[string]$LogFile,
 		[string]$Password,
 		[boolean]$Compress,
@@ -593,14 +636,15 @@ function Execute-BackupMikrotik
 	Handle-BackupSet -SourceFile $file -TargetPath $BackupSetsLocation -RetainPolicy @{'daily' = @{'retainDays' = 7;'retainCopies' = 7}; 'monthly' = @{'retainDays' = 62; 'retainCopies' = 2}} -LogFile $LogFile -Password $Password -Compress $Compress -Encrypt $Encrypt
 }
 
-#####===== Бекап папок (пример) =====#####
+#####===== Р‘РµРєР°Рї РїР°РїРѕРє (РїСЂРёРјРµСЂ) =====#####
 #Execute-BackupFolders -Folders 'C:\Users\aseregin\Desktop', 'C:\Users\aseregin\Documents', 'C:\Users\aseregin\Downloads' -BackupTempLocation C:\TMP -BackupSetsLocation \\tsclient\G\Archiv -Password "P@55word"
 
-#####===== Бекап баз данных SQL (пример) =====#####
+#####===== Р‘РµРєР°Рї Р±Р°Р· РґР°РЅРЅС‹С… SQL (РїСЂРёРјРµСЂ) =====#####
 #Execute-BackupSQL -Databases 'bd1', 'bd2' -BackupTempLocation C:\TMP -BackupSetsLocation \\tsclient\G\Archiv -Password "P@55word"
 
-#####===== Бекап микротика (пример) =====#####
+#####===== Р‘РµРєР°Рї РјРёРєСЂРѕС‚РёРєР° (РїСЂРёРјРµСЂ) =====#####
 #Execute-BackupMikrotik -MHost '192.168.88.1' -Login 'login' -Pass 'pass' -BackupTempLocation C:\TMP -BackupSetsLocation \\tsclient\G\Archiv -Password "P@55word"
 
-#####===== Расшифровка зашифрованного бекапа (пример) =====#####
+#####===== Р Р°СЃС€РёС„СЂРѕРІРєР° Р·Р°С€РёС„СЂРѕРІР°РЅРЅРѕРіРѕ Р±РµРєР°РїР° (РїСЂРёРјРµСЂ) =====#####
 #DecryptGzip-File -InputFile \\tsclient\G\Arhiv\Desktop_daily_0706132446.zip.zip -OutputFile C:\TMP\Desktop_daily_0706132446.zip -Password "P@55word"
+
