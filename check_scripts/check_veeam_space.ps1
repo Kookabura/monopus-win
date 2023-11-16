@@ -37,7 +37,7 @@ if ($line -ne $null) {
     }
 }
 
-$output = "check_veeam_space.$($states_text[$state])::freeSpace==$($freeSpace)__quota==$($quota)__date=$($date) | QUOTA=$($quota);;;; FREESPACE=$($freeSpace);;;;"
+$output = "check_veeam_space.$($states_text[$state])::freeSpace==$($freeSpace)__quota==$($quota)__date=$($date)__result==$($result) | QUOTA=$($quota);;;; FREESPACE=$($freeSpace);;;;"
 #$output = "check_veeam_space.$($states_text[$state])::result==$($result)__date=$($date) | RESULT=$($result);;;;"
 Write-Output $output
 exit $state
