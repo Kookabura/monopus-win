@@ -3,6 +3,7 @@ Param(
     [Parameter()][int32]$period = 10,
     [Parameter()][int32]$W = 0,
     [Parameter()][int32]$C = 10,
+    [Parameter()][string]$server = 'localhost',
     [Parameter(Mandatory=$true)][string]$base_name
 )
 
@@ -11,44 +12,69 @@ $states_text = @('ok', 'warning', 'critical', 'unknown')
 $state_colors = @('Green', 'Yellow', 'Red', 'DarkGray')
 
 $platform1c_obj = "V83.COMConnector"
-#$service1c_name =  "1C:Enterprise 8.3 Server Agent*"
-$agent1c_connection = "192.168.10.11"   #192.168.10.10/bd_test, 192.168.10.11/bd_test
-#$ErrorActionPreference = "SilentlyContinue"
 $state = 0
 $memory_used = 0
+$log_file = 'C:\Program Files (x86)\monopus\check_scripts\1c_background_tasks.log'
 
 try
 {
-    #regsvr32 "c:\Program Files\1cv8\8.3.19.1264\bin\comcntr.dll" IInfoBaseConnectionInfo.durationAllDBMS
+    try {
+        Add-Content -Value "$(get-date) Creating com object" -Path $log_file -Encoding Unicode
+        $comobj1c = New-Object -ComObject $platform1c_obj			#Создаем COM объект 1С
+    } catch {
+        Add-Content -Value "$(get-date) COM issue. Starting regsvr32" -Path $log_file -Encoding Unicode
+        $comDllPath = Get-ChildItem -Path "c:\Program Files" -Filter "comcntr.dll" -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notmatch 'C:\\Program Files\\Microsoft Azure Recovery Services Agent\\Scratch\\SSBV' } | Select-Object -ExpandProperty FullName -last 1
 
-	$comobj1c = New-Object -ComObject $platform1c_obj			#Создаем COM объект 1С
-	$connect1c = $comobj1c.ConnectAgent($agent1c_connection)	#Подключаемя к агенту сервера 1С
-
-
-	$cluster1c = $connect1c.GetClusters()						#Получаем доступные кластеры на данном сервере
-	$connect1c.Authenticate($cluster1c[0],"","")				#Подключаемся к кластеру; При условии что кластер только один, тоесть выбираем первый - [0]
-
-	#Получаем список сессий
-	#$sessions = $connect1c.GetSessions($cluster1c[0]) #.durationCurrent #[0]
-    $infoBases = $connect1c.GetInfoBases($cluster1c[0])
-    foreach ( $base in $infoBases)
-    {
-        if ( $base.Name -eq $base_name )
-        {
-            $sessions = $connect1c.GetInfoBaseSessions($cluster1c[0], $base)
-        }
+        $regsvr32Output = regsvr32.exe /s $comDllPath           # Если библиотека не зарегистрирована - регистрируем её
+        Add-Content -Value "$(get-date) Creating COM again" -Path $log_file -Encoding Unicode
+        $comobj1c = New-Object -ComObject $platform1c_obj
     }
+
+    $memory_used = Start-Job -ArgumentList @($server, $log_file, $platform1c_obj, $base_name) -ScriptBlock {
+
+        Add-Content -Value "$(get-date) Creating com object" -Path $args[1] -Encoding Unicode
+        $comobj1c = New-Object -ComObject $args[2]			#Создаем COM объект 1С
+    
+        Add-Content -Value "$(get-date) ConnectAgent $($args[0])" -Path $args[1] -Encoding Unicode
+	    $connect1c = $comobj1c.ConnectAgent($args[0])	#Подключаемя к агенту сервера 1С
+
+
+        Add-Content -Value "$(get-date) GetClusters" -Path $args[1] -Encoding Unicode
+	    $cluster1c = $connect1c.GetClusters()						#Получаем доступные кластеры на данном сервере
+
+        Add-Content -Value "$(get-date) Cluster auth" -Path $args[1] -Encoding Unicode
+	    $connect1c.Authenticate($cluster1c[0],"","")				#Подключаемся к кластеру; При условии что кластер только один, тоесть выбираем первый - [0]
+
+	    #Получаем список сессий
+	    #$sessions = $connect1c.GetSessions($cluster1c[0]) #.durationCurrent #[0]
+        Add-Content -Value "$(get-date) Get sessions" -Path $args[1] -Encoding Unicode
+        $infoBases = $connect1c.GetInfoBases($cluster1c[0])
+
+        Add-Content -Value "$(get-date) List bases" -Path $args[1] -Encoding Unicode
+        foreach ( $base in $infoBases)
+        {
+            if ( $base.Name -eq $args[3] )
+            {
+                Add-Content -Value "$(get-date) GetinfoBaseSessions" -Path $args[1] -Encoding Unicode
+                $sessions = $connect1c.GetInfoBaseSessions($cluster1c[0], $base)
+            }
+        }
     
 
-    foreach ($session in $sessions)
-    {
-        if ( $session.AppID -eq "BackgroundJob" )
+        foreach ($session in $sessions)
         {
-
-            $memory_used += $session.MemoryCurrent
-        }
+            if ( $session.AppID -eq "BackgroundJob" )
+            {
+                Add-Content -Value "$(get-date) Memory sum" -Path $args[1] -Encoding Unicode
+                $memory_used += $session.MemoryCurrent
+            }
        
-    }
+        }
+
+        Write-Output $memory_used
+
+    } | wait-job | receive-job
+
 }
 catch
 {
