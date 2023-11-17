@@ -242,6 +242,6 @@ function Monitor-Host {
 }
 
 #requires -Version 3.0
-Monitor-Host  -Verbose *>> "$PSScriptRoot\log.log"# Add for logging: -Verbose *>> "$PSScriptRoot\log.log"
+Monitor-Host  # Add for logging: -Verbose *>> "$PSScriptRoot\log.log"
 
 
