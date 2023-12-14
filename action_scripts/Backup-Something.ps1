@@ -100,17 +100,24 @@ function Handle-BackupSet {
     }
 
     Process {
+        # Перемещаем копии на сетевое хранилище
+
         $dtarget = "$TargetPath\daily\$($tmpfile.basename)_daily_$($date.ToString('ddMMHHmmss'))$($tmpfile.extension)"
         
         if (($tmpfile.fullname -split ':\\')[0] -eq ($dtarget -split ':\\')[0] -and ($tmpfile.Extension -eq '.zip' -or (!$Compress -and [string]::IsNullOrWhiteSpace($Encrypt)))) {
+            # Если в рамках одного диска
             cmd /c mklink /H "$dtarget" "$($tmpfile.fullname)" | Out-Null
             Write-Verbose 'NO Compress or Encrypt'
         } else {
+            # Если диски разные
+            # Проверка, нужно ли сжимать или шифровать файл
             if ($Compress -or ![string]::IsNullOrWhiteSpace($Encrypt)) {
                 Write-Verbose 'Compress or Encrypt'
         
+                # Путь для временного сжатого файла
                 $dtarget = "$dtarget.zip"
 
+                # Сжимаем файл
                 Write-Verbose "Compressing file"
                 Add-Type -assembly 'System.IO.Compression'
                 Add-Type -assembly 'System.IO.Compression.FileSystem'
@@ -119,22 +126,28 @@ function Handle-BackupSet {
                 [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($ZipFile, $tmpfile.fullname, (Split-Path $tmpfile.fullname -Leaf)) | Out-Null
                 $ZipFile.Dispose()
 
+                # Проверка, нужно ли шифровать файл
                 if (![string]::IsNullOrWhiteSpace($Encrypt)) {
                     if ($Password.Length -eq 0) {
                         Write-Warning "Encryption is carried out without a password!"
                     }
             
+                    # Шифрование сжатого файла
                     Write-Verbose "Encrypting compressed file"
                     $dtargetEncrypt = "$Encrypt\daily\$($tmpfile.basename)_daily_$($date.ToString('ddMMHHmmss'))$($tmpfile.extension).zip"
                     EncryptGzip-File -InputFile $dtarget -OutputFile $dtargetEncrypt -Password $Password
+                    #EncryptGzip-File -InputFile $compressedTempFile -OutputFile $Encrypt -Password $Password
+
                 } 
 
+                # Удаление временного сжатого файла, если не нужно сохранять сжатую версию
                 if (-not $Compress) {
                     Write-Verbose "Removing temporary compressed file"
                     Remove-Item $dtarget
                 }
 
             } else {
+                # Если сжатие и шифрование не требуется, просто копируем файл
                 Copy-Item $tmpfile.fullname $dtarget
             }
         }
@@ -156,11 +169,13 @@ function Handle-BackupSet {
                 $dtarget = "$dtarget.zip"
             }
 
+            # Откладываем копию в еженедельный архив
             if ($RetainPolicy['weekly']) {
                 $isMonthlyCopyExists = (ls ($path + '\weekly\*') -Include ($tmpfile.basename + '_weekly*') | ? {$_.lastwritetime -gt (Get-Date -hour 0 -minute 0 -second 0).AddDays(-7)}).count
                 if (!$isMonthlyCopyExists) {
                     $hardlink = "$path\weekly\" + ((Split-Path $dtarget -Leaf) -replace 'daily', 'weekly')
                     if ([bool]([System.Uri]$path).IsUnc) {
+                        # TO DO: just copy if it is unc path
                         Write-Verbose "Copiyng file to weekly repo"
                         cp $dtarget $hardlink
                     } else {
@@ -170,11 +185,13 @@ function Handle-BackupSet {
                 }
             }
 
+            # Откладываем копию в ежемесячный архив
             if ($RetainPolicy['monthly']) {
                 $isMonthlyCopyExists = (ls ($path + '\monthly\*') -Include ($tmpfile.basename + '_monthly*') | ? {$_.lastwritetime -gt (Get-Date -day 1 -hour 0 -minute 0 -second 0)}).count
                 if (!$isMonthlyCopyExists) {
                     $hardlink = "$path\monthly\" + ((Split-Path $dtarget -Leaf) -replace 'daily', 'monthly')
                     if ([bool]([System.Uri]$path).IsUnc) {
+                        # TO DO: just copy if it is unc path
                         Write-Verbose "Copiyng file to monthly repo"
                         cp $dtarget $hardlink
                     } else {
@@ -184,6 +201,8 @@ function Handle-BackupSet {
                 }
             }
 
+
+            # Удаляем старые копии
             Remove-OldFiles -TargetDir $path -RetainPolicy $RetainPolicy -BaseName $tmpfile.basename -LogFile $LogFile
         }
 
@@ -599,6 +618,7 @@ function Execute-BackupSQL
 		[string]$LogFile,
 		[string]$Password,
 		[boolean]$Compress,
+        [boolean]$Auto,
 		[string]$Encrypt = ''  # path to encrypted files directory
     )
 
@@ -607,7 +627,13 @@ function Execute-BackupSQL
 		if (!(Test-Path $BackupTempLocation)) {
 			mkdir $BackupTempLocation
 		}
-		$file = Backup-SQLDatabase -Database $db -Path $BackupTempLocation
+		$file = Backup-SQLDatabase -Database $db -Path $BackupTempLocation -Auto $auto
+
+        if ($file -match '_log_') {
+
+            $Encrypt = $false
+
+        }
 
 		Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Moving to backup set location and hadling copies count..."
 		Handle-BackupSet -SourceFile $file -TargetPath $BackupSetsLocation -RetainPolicy $RetainPolicy -LogFile $LogFile -Password $Password -Compress $Compress -Encrypt $Encrypt -Verbose
@@ -647,4 +673,3 @@ function Execute-BackupMikrotik
 
 #####===== Р Р°СЃС€РёС„СЂРѕРІРєР° Р·Р°С€РёС„СЂРѕРІР°РЅРЅРѕРіРѕ Р±РµРєР°РїР° (РїСЂРёРјРµСЂ) =====#####
 #DecryptGzip-File -InputFile \\tsclient\G\Arhiv\Desktop_daily_0706132446.zip.zip -OutputFile C:\TMP\Desktop_daily_0706132446.zip -Password "P@55word"
-
