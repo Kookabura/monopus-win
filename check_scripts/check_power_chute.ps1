@@ -12,8 +12,6 @@ $thresholds = [PSCustomObject]@{
     }
     'war' = [PSCustomObject]@{
         BatteryCharge = 80
-        SelfTestDate = 20
-        RuntimeCalibDate = 90
     }
     'cri' = [PSCustomObject]@{
         BatteryCharge = 80
