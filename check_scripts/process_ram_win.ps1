@@ -24,8 +24,9 @@ if ($process -eq '%') {
     {
 
         $sample = Get-Process -Name $process -ErrorAction Stop
-        $mem = $sample | Measure-Object -Sum -Property WS
-        $mem = [math]::Round(($mem.sum / 1024) / 1024, 2)
+        $mem = $sample | Measure-Object -Sum -Property WorkingSet64
+        $mem = [math]::Round(($mem.Sum / 1MB), 2)
+        #$mem = [math]::Round(($mem.sum / 1024) / 1024, 2)
 
        # $prefix = if ($output) {'__'} else {''}
        # $output +=  "$($prefix)$($p)_ram==$mem"
@@ -54,3 +55,4 @@ else{
     Write-Output $output
     exit $state
 }
+

@@ -1,24 +1,24 @@
 [CmdletBinding()]
 Param(
-	[Parameter(Mandatory=$true)][string]$S,
-	[Parameter(Mandatory=$true)][string]$D,
-	[Parameter(Mandatory=$true)][string]$Q,
+	[Parameter(Mandatory=$true)][string]$SqlServer,
+	[Parameter(Mandatory=$true)][string]$SqlDatabase,
+	[Parameter(Mandatory=$true)][string]$CommandText,
 	[Parameter()][int32]$W = $null,
 	[Parameter()][int32]$C
 )
 
 $t = $host.ui.RawUI.ForegroundColor
-$states_text = @('ok', 'warning', 'critical', 'unknown')
+$states_text = @('ok', 'warn', 'critical', 'unknown')
 $state_colors = @('Green', 'Yellow', 'Red', 'DarkGray')
 $state = 0
 
 try
 {
 	$SqlConnection = New-Object System.Data.SqlClient.SqlConnection
-	$SqlConnection.ConnectionString = "Server=$S; Database=$D; Integrated Security=True"
+	$SqlConnection.ConnectionString = "Server=$SqlServer; Database=$SqlDatabase; Integrated Security=True"
     $SqlConnection.Open()
 	$SqlCmd = $SqlConnection.CreateCommand()
-	$SqlCmd.CommandText = $Q
+	$SqlCmd.CommandText = $CommandText
 	$objReader = $SqlCmd.ExecuteReader()
 
 	while ($objReader.read())

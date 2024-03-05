@@ -3,7 +3,7 @@ Param(
     [Parameter()][float]$W = 0.8,
     [Parameter()][float]$C = 1,
     [Parameter()][int32]$period = 10,
-    [Parameter][string]$server = 'localhost'
+    [Parameter()][string]$server = 'localhost'
 )
 
 $t = $host.ui.RawUI.ForegroundColor
@@ -24,8 +24,12 @@ try
         $regsvr32Output = regsvr32.exe /s $comDllPath           # Если библиотека не зарегистрирована - регистрируем её
         $comobj1c = New-Object -ComObject $platform1c_obj
     }
+
+    $DB_call_time = Start-Job -ArgumentList @($server, $log_file, $platform1c_obj) -ScriptBlock {
+
+    $comobj1c = New-Object -ComObject $args[2]
     			
-	$connect1c = $comobj1c.ConnectAgent($server)	#Подключаемя к агенту сервера 1С
+	$connect1c = $comobj1c.ConnectAgent($args[0])	#Подключаемя к агенту сервера 1С
 
 
 	$cluster1c = $connect1c.GetClusters()						#Получаем доступные кластеры на данном сервере
@@ -35,6 +39,10 @@ try
 	$sessions = $connect1c.GetSessions($cluster1c[0]) #.durationCurrent #[0]
     $DB_call_time = ($connect1c.GetWorkingProcesses($cluster1c[0]).AvgDBCallTime | measure -Maximum).Maximum
     $DB_call_time = [math]::Round($DB_call_time, 2)
+
+    Write-Output $DB_call_time
+
+    } | Wait-Job | Receive-Job
 
     if ($DB_call_time -ge $W -and $DB_call_time -lt $C) {
         $state = 1
@@ -58,5 +66,3 @@ $host.ui.RawUI.ForegroundColor = $($state_colors[$state])
 Write-Output $output
 $host.ui.RawUI.ForegroundColor = $t
 exit $state
-
-
