@@ -8,6 +8,26 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [1.6.7]
 
+- created get_prn_status
+- check_scripts/check_rows_count.ps1 updated
+- 1c checks parametr bug fixed
+- check_scripts/process_ram_win.ps1 negative value bug fixed
+- check_rows_count output fixed
+- fixed CommandText param
+- action_scripts/Backup-Something.ps1 update
+- add check_scripts/check_veeam_space.ps1
+- update check_scripts/check_veeam_space.ps1
+- check_scripts/check_veeam_space.ps1 var bug
+- Fixed failed agent issue due to 1C checks
+- Removed debug by default
+- check_power_chute created
+- Update Backup-Something.ps1
+- Backup-sql collector created
+- check_power_chute.ps1 remove unnecessary
+- check_website_win.ps1 added
+
+## [1.6.7]
+
 ### Added
 - script az_ad_sync status
 - scripts check_files_in_folder, check_rows_count
