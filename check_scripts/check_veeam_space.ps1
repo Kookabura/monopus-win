@@ -17,6 +17,8 @@ if ($line -ne $null) {
     if ($line -match "Quota \(mb\):(\d+), FreeSpace \(mb\):(\d+)") {
         $quota = $matches[1] / 1000
         $freeSpace = $matches[2] / 1000
+        $used = [math]::Round(($quota - $freeSpace), 2)
+        $usedResult = [math]::Round(($used / $quota) * 100, 2)
         $result = [math]::Round(($freeSpace / $quota) * 100, 2)
 
         $regex = "\[(\d{2}\.\d{2}\.\d{4} \d{2}:\d{2}:\d{2})\]"
@@ -37,7 +39,8 @@ if ($line -ne $null) {
     }
 }
 
-$output = "check_veeam_space.$($states_text[$state])::freeSpace==$($freeSpace)__quota==$($quota)__date==$($date)__result==$($result) | QUOTA=$($quota);;;; FREESPACE=$($freeSpace);;;;"
+$output = "check_veeam_space.$($states_text[$state])::freeSpace==$($freeSpace)__quota==$($quota)__date==$($date)__result==$($result)__usedResult==$($usedResult)__used==$($used) | QUOTA=$($quota);;;; USED=$($used);;;;"
 #$output = "check_veeam_space.$($states_text[$state])::result==$($result)__date=$($date) | RESULT=$($result);;;;"
 Write-Output $output
 exit $state
+
