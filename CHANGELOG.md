@@ -6,7 +6,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
-## [1.6.7]
+## [1.7]
+
+- check_veeam_space updated: return used space
+
+## [1.6.8]
 
 - created get_prn_status
 - check_scripts/check_rows_count.ps1 updated
