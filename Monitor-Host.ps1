@@ -22,7 +22,7 @@ function Monitor-Host {
             process {
                 try
                 {
-                    $settings_obj = (Invoke-WebRequest $config.uri -Method Post -UseBasicParsing -Body @{api_key=$($config.api_key);id=$($config.id);mon_action='check/status';class="host"}).content -TimeoutSec 60 | ConvertFrom-Json
+                    $settings_obj = (Invoke-WebRequest $config.uri -Method Post -UseBasicParsing -Body @{api_key=$($config.api_key);id=$($config.id);mon_action='check/status';class="host"} -TimeoutSec 60).content | ConvertFrom-Json
                     $services = @{}
                     if ($settings_obj -and $settings_obj.data.services) {
                         ($settings_obj.data.services).psobject.properties  | % {$services[$_.Name] = $_.Value}
