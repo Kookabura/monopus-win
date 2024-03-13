@@ -22,7 +22,7 @@ function Monitor-Host {
             process {
                 try
                 {
-                    $settings_obj = (Invoke-WebRequest $config.uri -Method Post -UseBasicParsing -Body @{api_key=$($config.api_key);id=$($config.id);mon_action='check/status';class="host"}).content | ConvertFrom-Json
+                    $settings_obj = (Invoke-WebRequest $config.uri -Method Post -UseBasicParsing -Body @{api_key=$($config.api_key);id=$($config.id);mon_action='check/status';class="host"}).content -TimeoutSec 60 | ConvertFrom-Json
                     $services = @{}
                     if ($settings_obj -and $settings_obj.data.services) {
                         ($settings_obj.data.services).psobject.properties  | % {$services[$_.Name] = $_.Value}
@@ -178,7 +178,7 @@ function Monitor-Host {
                             # Send result only if state is changed or it's time fot that
                             if ($services[$key].state -ne $lastexitcode -or (($updatedon+$services[$key].interval*60) -lt $timestamp)) {
                                 Write-Verbose "$(get-date) Sending result to monOpus. The result is $result"
-                                $r = Invoke-WebRequest $config.uri -Method Post -UseBasicParsing -Body @{api_key=$($config.api_key);id=$services[$key].id;mon_action='check/handle_result';result=$result;state=$lastexitcode}
+                                $r = Invoke-WebRequest $config.uri -Method Post -UseBasicParsing -Body @{api_key=$($config.api_key);id=$services[$key].id;mon_action='check/handle_result';result=$result;state=$lastexitcode} -TimeoutSec 60
                                 $response = $r.content | ConvertFrom-Json
                                 Write-Verbose "$(get-date) $response"
                             } else {
