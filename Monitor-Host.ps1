@@ -22,7 +22,7 @@ function Monitor-Host {
             process {
                 try
                 {
-                    $settings_obj = (Invoke-WebRequest $config.uri -Method Post -UseBasicParsing -Body @{api_key=$($config.api_key);id=$($config.id);mon_action='check/status';class="host"}).content -TimeoutSec 60 | ConvertFrom-Json
+                    $settings_obj = (Invoke-WebRequest $config.uri -Method Post -UseBasicParsing -Body @{api_key=$($config.api_key);id=$($config.id);mon_action='check/status';class="host"} -TimeoutSec 60).content | ConvertFrom-Json
                     $services = @{}
                     if ($settings_obj -and $settings_obj.data.services) {
                         ($settings_obj.data.services).psobject.properties  | % {$services[$_.Name] = $_.Value}
@@ -135,35 +135,44 @@ function Monitor-Host {
                     if (Test-Path $command) {
                         Write-Verbose "$(get-date) Starting check command $command with parameters: $($parameters | ConvertTo-Json)"
 
-                        $job = [PowerShell]::Create().AddScript({
-                          param($command, $parameters, $config)
-                          $global:a = $config
-                          $parameters.output = & $command @parameters
-                          $parameters.code = $LASTEXITCODE
-                        }).AddArgument($command).AddArgument($parameters).AddArgument($config)
+                        $max_retry = 3
+                        $retry = 1
+                        $lastexitcode = 3
+                        while ($lastexitcode -ne 0 -and $retry -le 3) {
+                            Write-Verbose "$(get-date) Retry #$retry"
 
-                        # start thee job
-                        $async = $job.BeginInvoke()
+                            $job = [PowerShell]::Create().AddScript({
+                              param($command, $parameters, $config)
+                              $global:a = $config
+                              $parameters.output = & $command @parameters
+                              $parameters.code = $LASTEXITCODE
+                            }).AddArgument($command).AddArgument($parameters).AddArgument($config)
 
-                        $n = 0
-                        while (!$async.IsCompleted -and $n -le $config.timeout) {
-                            $n++
-                            sleep 1
-                        }
+                            # start thee job                        
+                            $async = $job.BeginInvoke()
 
-                        if ($n -gt $config.timeout) {
-                            Write-Verbose "$(get-date) Timeout exceeded"
-							$lastexitcode = 3
-							$result = 'check_timeout_on_client'
-                            #$job.Stop()
-                        } else {
-                            Write-Verbose "$(get-date) Job verbose output $($job.Streams.Verbose)"
-                            if ($job.HadErrors -and $job.Streams.Error) {
-                                Write-Verbose "$(get-date) Job finished with error $($job.Streams.Error)"
+                            $n = 0
+                            while (!$async.IsCompleted -and $n -le $config.timeout) {
+                                $n++
+                                sleep 1
                             }
-                            $result = $parameters.output
-                            $lastexitcode = $parameters.code
-                            $job.EndInvoke($async)
+
+                            if ($n -gt $config.timeout) {
+                                Write-Verbose "$(get-date) Timeout exceeded"
+							    $lastexitcode = 3
+							    $result = 'check_timeout_on_client'
+                                $job.Dispose()
+                            } else {
+                                Write-Verbose "$(get-date) Job verbose output $($job.Streams.Verbose)"
+                                if ($job.HadErrors -and $job.Streams.Error) {
+                                    Write-Verbose "$(get-date) Job finished with error $($job.Streams.Error)"
+                                }
+                                $result = $parameters.output
+                                $lastexitcode = $parameters.code
+                                $job.EndInvoke($async)
+                            }
+                            $retry++
+
                         }
 
 
