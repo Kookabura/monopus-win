@@ -28,7 +28,7 @@ Begin {
                     }
 
                     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-                    Invoke-WebRequest "https://github.com/Kookabura/monopus-win/archive/$NewVersion.zip" -OutFile "$env:TEMP\monopus-win.zip" -UseBasicParsing
+                    Invoke-WebRequest "https://github.com/Kookabura/monopus-win/archive/$NewVersion.zip" -OutFile "$env:TEMP\monopus-win.zip" -UseBasicParsing -TimeoutSec 30
 
                     if (Test-Path "$env:TEMP\monopus-win-$NewVersion") {
                         rm "$env:TEMP\monopus-win-$NewVersion" -Force -Recurse
@@ -71,7 +71,7 @@ Process {
     $state = 0
 
     #Check updates
-    $latest_version = [System.Version](Invoke-WebRequest "https://monopus.io/ver.txt" -UseBasicParsing).content
+    $latest_version = [System.Version](Invoke-WebRequest "https://monopus.io/ver.txt" -UseBasicParsing -TimeoutSec 30).content
     if ($latest_version -gt [System.Version]$config.version) {
         if ($v = Update-MonOpusClient -Config $Config -NewVersion $latest_version) {
             
