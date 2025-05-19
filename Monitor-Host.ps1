@@ -144,14 +144,15 @@ function Monitor-Host {
                             $job = [PowerShell]::Create().AddScript({
                               param($command, $parameters, $config)
                               $global:a = $config
-                              $parameters.output = & $command @parameters
-                              $parameters.code = $LASTEXITCODE
+                              $output = & $command @parameters
+                              Write-Output @{"text" = $output; "code" = $lastexitcode}
                             }).AddArgument($command).AddArgument($parameters).AddArgument($config)
 
                             # start thee job                        
                             $async = $job.BeginInvoke()
 
                             $n = 0
+                            # По сути async здесь не используется. Может в будущем будет
                             while (!$async.IsCompleted -and $n -le $config.timeout) {
                                 $n++
                                 sleep 1
@@ -167,9 +168,10 @@ function Monitor-Host {
                                 if ($job.HadErrors -and $job.Streams.Error) {
                                     Write-Verbose "$(get-date) Job finished with error $($job.Streams.Error)"
                                 }
-                                $result = $parameters.output
-                                $lastexitcode = $parameters.code
-                                $job.EndInvoke($async)
+
+                                $job_result = $job.EndInvoke($async)
+                                $result = $job_result.text
+                                $lastexitcode = $job_result.code
                             }
                             $retry++
 
@@ -187,7 +189,9 @@ function Monitor-Host {
                             # Send result only if state is changed or it's time fot that
                             if ($services[$key].state -ne $lastexitcode -or (($updatedon+$services[$key].interval*60) -lt $timestamp)) {
                                 Write-Verbose "$(get-date) Sending result to monOpus. The result is $result"
-                                $r = Invoke-WebRequest $config.uri -Method Post -UseBasicParsing -Body @{api_key=$($config.api_key);id=$services[$key].id;mon_action='check/handle_result';result=$result;state=$lastexitcode} -TimeoutSec 60
+                                $request_body = @{api_key=$($config.api_key);id=$services[$key].id;mon_action='check/handle_result';result=$result;state=$lastexitcode}
+                                Write-Verbose "$(get-date) Request body is $($request_body | ConvertTo-Json)"
+                                $r = Invoke-WebRequest $config.uri -Method Post -UseBasicParsing -Body $request_body -TimeoutSec 60
                                 $response = $r.content | ConvertFrom-Json
                                 Write-Verbose "$(get-date) $response"
                             } else {
