@@ -291,7 +291,7 @@ function DecryptGzip-File
 	$OutputStream.Close()
 }
 
-# Р‘РµРєР°Рї РјРёРєСЂРѕС‚РёРєР°
+# Бэкап Микротика
 function Backup-Mikrotik {
     [CmdletBinding()]
     Param (
@@ -345,7 +345,7 @@ function Backup-Mikrotik {
 }
 
 
-# Р‘РµРєР°Рї SQL
+# Бэкап SQL
 function Backup-SQLDatabase {
     [CmdletBinding()]
     Param (
@@ -376,12 +376,12 @@ function Backup-SQLDatabase {
         $srv.ConnectionContext.StatementTimeout = 0
         $date = Get-Date
 
-        # РЎСѓС‰РµСЃС‚РІСѓРµС‚ Р»Рё РїР°РїРєР° РґР»СЏ Р±РµРєР°РїР°
+        # Существует ли папка для бэкапа
         if (!(Test-Path $path)) {
             throw "Backup path $path not found. Cannot proccess backup."
         }
 
-        # РЈРґР°Р»СЏРµРј РєРѕРїРёСЋ, РµСЃР»Рё РѕРЅР° СѓР¶Рµ РµСЃС‚СЊ
+        # Удаляем копию, если она уже есть
         if ($type -eq "Database") {
             $path = $Path + $database + '_full' + '.bak'
         } elseif ($type -eq "log") {
@@ -534,77 +534,331 @@ function Remove-ShadowLink {
 
 }
 
-
-#####===== Р‘РµРєР°Рї РїР°РїРѕРє =====#####
+#####===== Умный бэкап папок с автоматическим выбором метода =====#####
 function Execute-BackupFolders
 {
     [CmdletBinding()]
     param (
-		[Parameter(Mandatory=$true, ValueFromPipeline=$true)][string[]]$Folders, # РїРµСЂРµС‡РёСЃР»РµРЅРёРµ РїР°РїРѕРє РґР»СЏ Р±РµРєР°РїР°
-		[Parameter(Mandatory=$true, ValueFromPipeline=$true)][string]$BackupTempLocation, # РІСЂРµРјРµРЅРЅРѕРµ С…СЂР°РЅРёР»РёС‰Рµ РєРѕРїРёР№
-		[Parameter(Mandatory=$true)][string]$BackupSetsLocation, # С…СЂР°РЅРёР»РёС‰Рµ Р±РµРєР°РїРѕРІ
-		[string]$LogFile,
-		[string]$Password,
-		[boolean]$Compress,
-		[boolean]$Encrypt
+        [Parameter(Mandatory=$true)][string[]]$Folders,
+        [Parameter(Mandatory=$true)][string]$BackupTempLocation,
+        [Parameter(Mandatory=$true)][string]$BackupSetsLocation,
+        [string]$LogFile,
+        [string]$Password,
+        [boolean]$Compress,
+        [boolean]$Encrypt,
+        [switch]$ForceRobocopy,
+        [int]$RetryCount = 3
     )
-	
-	# РЎРѕР·РґР°РµРј С‚РµРЅРµРІС‹Рµ РєРѕРїРёРё РґР»СЏ РґРёСЃРєРѕРІ, РЅР° РєРѕС‚РѕСЂС‹С… РЅР°С…РѕРґСЏС‚СЃСЏ РїР°РїРєРё
-	Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Starting folders backup job..."
-	$volumes = @()
-	$shadows = @{}
-	foreach ($folder in $Folders) {
-		# РџРѕР»СѓС‡Р°РµРј РґРёСЃРє РїР°РїРєРё
-		$volume = Split-Path $folder -Qualifier
-		if ($volumes -notcontains $volume) {
-			Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Creating shadow copy for volume $volume..."
-			$shadow = New-ShadowLink -Drive $volume
-			
-			$shadowpath = $(Join-Path $volume 'shadow')
-			Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Creating SymLink to shadowcopy at $shadowpath"
-			$target = "$($shadow.DeviceObject)\";
-			Invoke-Expression -Command "cmd /c mklink /d '$shadowpath' '$target'" | Out-Null
-
-			$shadows[$volume] = $shadow
-			$volumes += $volume
-		}
-	}
-
-	# Р‘РµРєР°РїРёРј РґР°РЅРЅС‹Рµ РёР· С‚РµРЅРµРІРѕР№ РєРѕРїРёРё
-	foreach ($folder in $Folders) {
-		Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Backing up $folder to temp location $BackupTempLocation"
-		if (!(Test-Path $BackupTempLocation)) {
-			mkdir $BackupTempLocation
-		}
-		try {
-			# Р‘РµРєР°РїРёРј РїР°РїРєСѓ
-			$file = Backup-Folder -Folder (Join-Path $shadowpath (Split-Path $folder -NoQualifier)) -BackupPath $BackupTempLocation
-
-			#РџРµСЂРµРјРµС‰Р°РµРј Р±РµРєР°Рї РІ С…СЂР°РЅРёР»РёС‰Рµ
-			Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Moving to backup set location and hadling copies count"
-			Handle-BackupSet -SourceFile $file -TargetPath $BackupSetsLocation -RetainPolicy @{'daily' = @{'retainDays' = 7;'retainCopies' = 7}; 'monthly' = @{'retainDays' = 366; 'retainCopies' = 12}} -LogFile $LogFile -Password $Password -Compress $Compress -Encrypt $Encrypt
-			Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Backup is finished successfully."
-		} catch {
-			Write-Host ((get-date -format 'dd.MM.yy HH:mm:ss: Backup folder $folder is failed [line: ') + $_.InvocationInfo.ScriptLineNumber + '] ' + ' - ' + $_) -ForegroundColor Red
-		}
-	}
-
-	# РЈРґР°Р»СЏРµРј С‚РµРЅРµРІС‹Рµ РєРѕРїРёРё
-	foreach ($volume in $shadows.keys) {
-		Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Removing shadow copy for volume $volume"
-		Remove-ShadowLink $shadows[$volume]
-		cmd /c rmdir (Join-Path $volume 'shadow')
-	}
+    
+    Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Starting smart folder backup..."
+    
+    # Проверяем доступность VSS
+    $vssAvailable = Test-VSSAvailability
+    $useVSS = $vssAvailable -and (-not $ForceRobocopy)
+    
+    if ($useVSS) {
+        Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): VSS available. Using shadow copies for consistent backup."
+        Execute-BackupWithVSS -Folders $Folders -BackupTempLocation $BackupTempLocation -BackupSetsLocation $BackupSetsLocation -LogFile $LogFile -Password $Password -Compress $Compress -Encrypt $Encrypt
+    } else {
+        Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): VSS not available. Using Robocopy with retry logic."
+        if (-not $vssAvailable) {
+            Write-Warning "VSS shadow copies are not available. Some open files may not be backed up correctly."
+        }
+        Execute-BackupWithRobocopy -Folders $Folders -BackupTempLocation $BackupTempLocation -BackupSetsLocation $BackupSetsLocation -LogFile $LogFile -Password $Password -Compress $Compress -Encrypt $Encrypt -RetryCount $RetryCount
+    }
 }
 
-#####===== Р‘РµРєР°Рї Р±Р°Р· РґР°РЅРЅС‹С… SQL =====#####
+#####===== Проверка доступности VSS =====#####
+function Test-VSSAvailability
+{
+    try {
+        # Проверяем права администратора
+        $isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")
+        if (-not $isAdmin) {
+            Write-Verbose "VSS requires administrator privileges"
+            return $false
+        }
+        
+        # Проверяем службу VSS
+        $vssService = Get-Service -Name VSS -ErrorAction SilentlyContinue
+        if (-not $vssService -or $vssService.Status -ne 'Running') {
+            Write-Verbose "VSS service is not running"
+            return $false
+        }
+        
+        # Пробуем создать тестовый снапшот
+        $testDrive = $env:SystemDrive
+        $shadowClass = [WMICLASS]"root\cimv2:win32_shadowcopy"
+        $result = $shadowClass.Create($testDrive, "ClientAccessible")
+        
+        if ($result.ReturnValue -eq 0) {
+            # Успешно - удаляем тестовый снапшот
+            $shadow = Get-WmiObject Win32_ShadowCopy | Where-Object { $_.ID -eq $result.ShadowID }
+            if ($shadow) {
+                $shadow.Delete()
+            }
+            Write-Verbose "VSS is available and working"
+            return $true
+        } else {
+            Write-Verbose "VSS creation failed with error: $($result.ReturnValue)"
+            return $false
+        }
+    } catch {
+        Write-Verbose "VSS test failed: $_"
+        return $false
+    }
+}
+
+#####===== Бэкап с VSS (теневые копии) =====#####
+function Execute-BackupWithVSS
+{
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory=$true)][string[]]$Folders,
+        [Parameter(Mandatory=$true)][string]$BackupTempLocation,
+        [Parameter(Mandatory=$true)][string]$BackupSetsLocation,
+        [string]$LogFile,
+        [string]$Password,
+        [boolean]$Compress,
+        [boolean]$Encrypt
+    )
+    
+    $shadows = @{}
+    $shadowLinks = @{}
+    
+    try {
+        # Создаем теневые копии для каждого тома
+        $volumes = @()
+        foreach ($folder in $Folders) {
+            $volume = Split-Path $folder -Qualifier
+            if ($volumes -notcontains $volume -and $volume) {
+                Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Creating shadow copy for volume $volume"
+                
+                $shadowClass = [WMICLASS]"root\cimv2:win32_shadowcopy"
+                $result = $shadowClass.Create($volume, "ClientAccessible")
+                
+                if ($result.ReturnValue -eq 0) {
+                    $shadow = Get-WmiObject Win32_ShadowCopy | Where-Object { $_.ID -eq $result.ShadowID }
+                    $shadows[$volume] = $shadow
+                    
+                    # Создаем симлинк к теневой копии
+                    $shadowLinkPath = Join-Path $env:TEMP "Shadow_$([System.Guid]::NewGuid().ToString())"
+                    $targetPath = "$($shadow.DeviceObject)\"
+                    
+                    # Используем New-Item для создания junction вместо mklink
+                    New-Item -ItemType Junction -Path $shadowLinkPath -Target $targetPath -Force | Out-Null
+                    $shadowLinks[$volume] = $shadowLinkPath
+                    
+                    Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Shadow copy created and linked to $shadowLinkPath"
+                    $volumes += $volume
+                } else {
+                    Write-Error "Failed to create shadow copy for $volume. Error code: $($result.ReturnValue)"
+                    throw "VSS creation failed"
+                }
+            }
+        }
+        
+        # Бэкапим из теневых копий
+        foreach ($folder in $Folders) {
+            $volume = Split-Path $folder -Qualifier
+            $relativePath = Split-Path $folder -NoQualifier
+            
+            if ($shadowLinks.ContainsKey($volume)) {
+                $shadowSource = Join-Path $shadowLinks[$volume] $relativePath.TrimStart('\')
+                
+                if (Test-Path $shadowSource) {
+                    Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Backing up from shadow copy: $shadowSource"
+                    
+                    $folderName = (Get-Item $folder).Name
+                    $backupName = "$folderName" + (Get-Date -Format "_yyyy-MM-dd_HH-mm-ss")
+                    $currentBackup = Join-Path $BackupTempLocation "$backupName.zip"
+                    
+                    # Создаем бэкап из теневой копии
+                    Backup-Folder -Folder $shadowSource -BackupPath $BackupTempLocation -Name $backupName
+                    
+                    # Обрабатываем бэкап-сет
+                    Handle-BackupSet -SourceFile $currentBackup -TargetPath $BackupSetsLocation -RetainPolicy @{
+                        'daily' = @{'retainDays' = 7; 'retainCopies' = 7}
+                        'monthly' = @{'retainDays' = 93; 'retainCopies' = 3}
+                    } -LogFile $LogFile -Password $Password -Compress $Compress -Encrypt $Encrypt
+                    
+                    Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): VSS backup of $folder completed"
+                } else {
+                    Write-Warning "Shadow source path not found: $shadowSource"
+                }
+            }
+        }
+        
+    } finally {
+        # Очистка: удаляем симлинки и теневые копии
+        foreach ($volume in $shadowLinks.Keys) {
+            $linkPath = $shadowLinks[$volume]
+            if (Test-Path $linkPath) {
+                Remove-Item $linkPath -Force -Recurse -ErrorAction SilentlyContinue
+            }
+        }
+        
+        foreach ($volume in $shadows.Keys) {
+            $shadow = $shadows[$volume]
+            if ($shadow) {
+                try {
+                    $shadow.Delete()
+                    Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Shadow copy for $volume removed"
+                } catch {
+                    $errorMessage = $_
+                    Write-Warning "Failed to remove shadow copy for $volume - $errorMessage"
+                }
+            }
+        }
+    }
+}
+
+#####===== Бэкап с Robocopy (резервный метод) =====#####
+function Execute-BackupWithRobocopy
+{
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory=$true)][string[]]$Folders,
+        [Parameter(Mandatory=$true)][string]$BackupTempLocation,
+        [Parameter(Mandatory=$true)][string]$BackupSetsLocation,
+        [string]$LogFile,
+        [string]$Password,
+        [boolean]$Compress,
+        [boolean]$Encrypt,
+        [int]$RetryCount = 3
+    )
+    
+    $incrementalTemp = Join-Path $BackupTempLocation "Incremental"
+    if (!(Test-Path $incrementalTemp)) {
+        New-Item -Path $incrementalTemp -ItemType Directory -Force | Out-Null
+    }
+    
+    foreach ($folder in $Folders) {
+        if (!(Test-Path $folder)) {
+            Write-Warning "Source folder $folder does not exist. Skipping."
+            continue
+        }
+        
+        $folderName = (Get-Item $folder).Name
+        $tempBackupFolder = Join-Path $incrementalTemp $folderName
+        $backupName = "$folderName" + (Get-Date -Format "_yyyy-MM-dd_HH-mm-ss")
+        $currentBackup = Join-Path $BackupTempLocation "$backupName.zip"
+        
+        try {
+            # Создаем/обновляем инкрементальную копию через Robocopy
+            if (!(Test-Path $tempBackupFolder)) {
+                New-Item -Path $tempBackupFolder -ItemType Directory -Force | Out-Null
+            }
+            
+            $robocopyArgs = @(
+                "`"$folder`"",
+                "`"$tempBackupFolder`"",
+                "/MIR", "/COPY:DAT", "/DCOPY:T",
+                "/R:$RetryCount", "/W:10",
+                "/NP", "/NDL", "/NFL", "/NJH", "/NJS"
+            )
+            
+            Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Synchronizing $folder with Robocopy..."
+            $robocopyResult = Start-Process -FilePath "robocopy" -ArgumentList $robocopyArgs -Wait -PassThru -NoNewWindow
+            
+            if ($robocopyResult.ExitCode -le 7) {
+                # Создаем финальный бэкап
+                Backup-Folder -Folder $tempBackupFolder -BackupPath $BackupTempLocation -Name $backupName
+                # Расписание
+                Handle-BackupSet -SourceFile $currentBackup -TargetPath $BackupSetsLocation -RetainPolicy @{
+                    'daily' = @{'retainDays' = 7; 'retainCopies' = 7}
+                    'monthly' = @{'retainDays' = 93; 'retainCopies' = 3}
+                } -LogFile $LogFile -Password $Password -Compress $Compress -Encrypt $Encrypt
+                
+                Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Robocopy backup of $folder completed"
+            } else {
+                $exitCode = $robocopyResult.ExitCode
+                Write-Error "Robocopy failed for $folder with exit code $exitCode"
+            }
+            
+        } catch {
+            $errorMessage = $_
+            Write-Error "Robocopy backup failed for $folder - $errorMessage"
+        }
+    }
+}
+
+# Бекап папок
+function Backup-Folder {
+    [CmdletBinding(SupportsShouldProcess=$True)]
+    Param(
+        [Parameter(Mandatory=$true)][string]$Folder,
+        [Parameter(Mandatory=$true)][string]$BackupPath,
+        [string]$Name,
+        [int]$CompressionLevel = 5
+    )
+
+    Process {
+        try {
+            if (!($source = Get-Item $Folder -ErrorAction SilentlyContinue)) {
+                throw "Source folder $Folder does not exist"
+            }
+
+            if (!(Test-Path $BackupPath)) {
+                New-Item -Path $BackupPath -ItemType Directory -Force | Out-Null
+            }
+
+            if (!$Name) {
+                $Name = $source.Name
+            }
+
+            $backupFile = Join-Path $BackupPath "$Name.zip"
+            
+            Write-Verbose "Backuping folder $Folder to $backupFile"
+            
+            if (Test-Path $backupFile) {
+                Remove-Item $backupFile -Force
+            }
+            
+            Add-Type -Assembly 'System.IO.Compression'
+            Add-Type -Assembly 'System.IO.Compression.FileSystem'
+            
+            [System.IO.Compression.ZipFile]::CreateFromDirectory($Folder, $backupFile, $CompressionLevel, $false)
+            
+            Write-Output $backupFile
+            
+        } catch {
+            $errorMessage = $_
+            Write-Error "Failed to backup folder $Folder - $errorMessage"
+            throw
+        }
+    }
+}
+
+#####===== Функция для очистки старых инкрементальных копий =====#####
+function Clear-OldIncrementalBackups
+{
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory=$true)][string]$IncrementalPath,
+        [int]$KeepDays = 7
+    )
+    
+    if (Test-Path $IncrementalPath) {
+        $cutoffDate = (Get-Date).AddDays(-$KeepDays)
+        
+        Get-ChildItem -Path $IncrementalPath -Directory | Where-Object {
+            $_.LastWriteTime -lt $cutoffDate
+        } | ForEach-Object {
+            Write-Host "Removing old incremental backup: $($_.Name)"
+            Remove-Item -Path $_.FullName -Recurse -Force
+        }
+    }
+}
+
+#####===== Бэкап баз данных SQL =====#####
 function Execute-BackupSQL
 {
 	[CmdletBinding()]
     param (
-		[Parameter(Mandatory=$true, ValueFromPipeline=$true)][string[]]$Databases, # РїРµСЂРµС‡РёСЃР»РµРЅРёРµ Р‘Р”
-		[Parameter(Mandatory=$true, ValueFromPipeline=$true)][string]$BackupTempLocation, # РІСЂРµРјРµРЅРЅРѕРµ С…СЂР°РЅРёР»РёС‰Рµ РєРѕРїРёР№
-		[Parameter(Mandatory=$true)][string]$BackupSetsLocation, # С…СЂР°РЅРёР»РёС‰Рµ Р±РµРєР°РїРѕРІ
+		[Parameter(Mandatory=$true, ValueFromPipeline=$true)][string[]]$Databases,          # перечисление БД
+		[Parameter(Mandatory=$true, ValueFromPipeline=$true)][string]$BackupTempLocation,   # временное хранилище копий
+		[Parameter(Mandatory=$true)][string]$BackupSetsLocation,                            # хранилище бэкапов
         [hashtable]$RetainPolicy = @{
 			'daily' = @{
 				'retainDays' = 14;
@@ -642,16 +896,16 @@ function Execute-BackupSQL
 	}
 }
 
-#####===== Р‘РµРєР°Рї РјРёРєСЂРѕС‚РёРєР° =====##### РґРѕРґРµР»Р°С‚СЊ
+#####===== Бэкап микротика =====##### # доделать
 function Execute-BackupMikrotik
 {
 	[CmdletBinding()]
     param (
-		[Parameter(Mandatory=$true, ValueFromPipeline=$true)][string]$MHost, # ip
-		[Parameter(Mandatory=$true, ValueFromPipeline=$true)][string]$Login, # Login РґР»СЏ РјРёРєСЂРѕС‚РёРєР°
-		[Parameter(Mandatory=$true, ValueFromPipeline=$true)][string]$Pass, # РїР°СЂРѕР»СЊ РґР»СЏ РјРёРєСЂРѕС‚РёРєР°
-		[Parameter(Mandatory=$true, ValueFromPipeline=$true)][string]$BackupTempLocation, # РІСЂРµРјРµРЅРЅРѕРµ С…СЂР°РЅРёР»РёС‰Рµ РєРѕРїРёР№
-		[Parameter(Mandatory=$true)][string]$BackupSetsLocation, # С…СЂР°РЅРёР»РёС‰Рµ Р±РµРєР°РїРѕРІ
+		[Parameter(Mandatory=$true, ValueFromPipeline=$true)][string]$MHost,                # ip
+		[Parameter(Mandatory=$true, ValueFromPipeline=$true)][string]$Login,                # Login для микротика
+		[Parameter(Mandatory=$true, ValueFromPipeline=$true)][string]$Pass,                 # Пароль для микротика
+		[Parameter(Mandatory=$true, ValueFromPipeline=$true)][string]$BackupTempLocation,   # временное хранилище копий
+        [Parameter(Mandatory=$true)][string]$BackupSetsLocation,                            # хранилище бэкапов
 		[string]$LogFile,
 		[string]$Password,
 		[boolean]$Compress,
@@ -662,14 +916,33 @@ function Execute-BackupMikrotik
 	Handle-BackupSet -SourceFile $file -TargetPath $BackupSetsLocation -RetainPolicy @{'daily' = @{'retainDays' = 7;'retainCopies' = 7}; 'monthly' = @{'retainDays' = 62; 'retainCopies' = 2}} -LogFile $LogFile -Password $Password -Compress $Compress -Encrypt $Encrypt
 }
 
-#####===== Р‘РµРєР°Рї РїР°РїРѕРє (РїСЂРёРјРµСЂ) =====#####
+# Запуск бэкапа
+Execute-BackupFolders -Folders 'D:\!Disp', 'C:\Users' -BackupTempLocation 'F:\TMP' -BackupSetsLocation 'F:\!Backup' -LogFile 'F:\!Backup\logs.log' -Compress $true
+
+
+
+
+
+# Примеры использования:
+
+#####===== Бекaп папок (пример) =====#####
 #Execute-BackupFolders -Folders 'C:\Users\aseregin\Desktop', 'C:\Users\aseregin\Documents', 'C:\Users\aseregin\Downloads' -BackupTempLocation C:\TMP -BackupSetsLocation \\tsclient\G\Archiv -Password "P@55word"
 
-#####===== Р‘РµРєР°Рї Р±Р°Р· РґР°РЅРЅС‹С… SQL (РїСЂРёРјРµСЂ) =====#####
+#####===== Бекaп баз данных SQL (пример) =====#####
 #Execute-BackupSQL -Databases 'bd1', 'bd2' -BackupTempLocation C:\TMP -BackupSetsLocation \\tsclient\G\Archiv -Password "P@55word"
 
-#####===== Р‘РµРєР°Рї РјРёРєСЂРѕС‚РёРєР° (РїСЂРёРјРµСЂ) =====#####
+#####===== Бекaп микротика (пример) =====#####
 #Execute-BackupMikrotik -MHost '192.168.88.1' -Login 'login' -Pass 'pass' -BackupTempLocation C:\TMP -BackupSetsLocation \\tsclient\G\Archiv -Password "P@55word"
 
-#####===== Р Р°СЃС€РёС„СЂРѕРІРєР° Р·Р°С€РёС„СЂРѕРІР°РЅРЅРѕРіРѕ Р±РµРєР°РїР° (РїСЂРёРјРµСЂ) =====#####
+#####===== Расшифровка зашифрованного бекапа (пример) =====#####
 #DecryptGzip-File -InputFile \\tsclient\G\Arhiv\Desktop_daily_0706132446.zip.zip -OutputFile C:\TMP\Desktop_daily_0706132446.zip -Password "P@55word"
+
+# Для папок:
+#####===== Автоматический выбор (рекомендуется) =====#####
+# Execute-BackupFolders -Folders 'D:\!Disp', 'C:\Users' -BackupTempLocation 'F:\TMP' -BackupSetsLocation 'F:\!Backup' -LogFile 'F:\!Backup\logs.log' -Compress $true
+
+#####===== Принудительно использовать Robocopy =====#####
+# Execute-BackupFolders -Folders 'D:\!Disp', 'C:\Users' -BackupTempLocation 'F:\TMP' -BackupSetsLocation 'F:\!Backup' -ForceRobocopy -Compress $true
+
+#####===== Проверить доступность VSS =====#####
+# Test-VSSAvailability
