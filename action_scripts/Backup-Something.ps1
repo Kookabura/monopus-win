@@ -291,7 +291,7 @@ function DecryptGzip-File
 	$OutputStream.Close()
 }
 
-# Р‘РµРєР°Рї РјРёРєСЂРѕС‚РёРєР°
+# Бэкап Микротика
 function Backup-Mikrotik {
     [CmdletBinding()]
     Param (
@@ -345,7 +345,7 @@ function Backup-Mikrotik {
 }
 
 
-# Р‘РµРєР°Рї SQL
+# Бэкап SQL
 function Backup-SQLDatabase {
     [CmdletBinding()]
     Param (
@@ -376,12 +376,12 @@ function Backup-SQLDatabase {
         $srv.ConnectionContext.StatementTimeout = 0
         $date = Get-Date
 
-        # РЎСѓС‰РµСЃС‚РІСѓРµС‚ Р»Рё РїР°РїРєР° РґР»СЏ Р±РµРєР°РїР°
+        # Существует ли папка для бэкапа
         if (!(Test-Path $path)) {
             throw "Backup path $path not found. Cannot proccess backup."
         }
 
-        # РЈРґР°Р»СЏРµРј РєРѕРїРёСЋ, РµСЃР»Рё РѕРЅР° СѓР¶Рµ РµСЃС‚СЊ
+        # Удаляем копию, если она уже есть
         if ($type -eq "Database") {
             $path = $Path + $database + '_full' + '.bak'
         } elseif ($type -eq "log") {
@@ -535,26 +535,26 @@ function Remove-ShadowLink {
 }
 
 
-#####===== Р‘РµРєР°Рї РїР°РїРѕРє =====#####
+#####===== Бэкап папок =====#####
 function Execute-BackupFolders
 {
     [CmdletBinding()]
     param (
-		[Parameter(Mandatory=$true, ValueFromPipeline=$true)][string[]]$Folders, # РїРµСЂРµС‡РёСЃР»РµРЅРёРµ РїР°РїРѕРє РґР»СЏ Р±РµРєР°РїР°
-		[Parameter(Mandatory=$true, ValueFromPipeline=$true)][string]$BackupTempLocation, # РІСЂРµРјРµРЅРЅРѕРµ С…СЂР°РЅРёР»РёС‰Рµ РєРѕРїРёР№
-		[Parameter(Mandatory=$true)][string]$BackupSetsLocation, # С…СЂР°РЅРёР»РёС‰Рµ Р±РµРєР°РїРѕРІ
+		[Parameter(Mandatory=$true, ValueFromPipeline=$true)][string[]]$Folders, # перечисление папок для бэкапа
+		[Parameter(Mandatory=$true, ValueFromPipeline=$true)][string]$BackupTempLocation, # временное хранилище копий
+		[Parameter(Mandatory=$true)][string]$BackupSetsLocation, # хранилище бэкапов
 		[string]$LogFile,
 		[string]$Password,
 		[boolean]$Compress,
 		[boolean]$Encrypt
     )
 	
-	# РЎРѕР·РґР°РµРј С‚РµРЅРµРІС‹Рµ РєРѕРїРёРё РґР»СЏ РґРёСЃРєРѕРІ, РЅР° РєРѕС‚РѕСЂС‹С… РЅР°С…РѕРґСЏС‚СЃСЏ РїР°РїРєРё
+	# Создаем теневые копии для дисков, на которых находятся папки
 	Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Starting folders backup job..."
 	$volumes = @()
 	$shadows = @{}
 	foreach ($folder in $Folders) {
-		# РџРѕР»СѓС‡Р°РµРј РґРёСЃРє РїР°РїРєРё
+		# Получаем диск папки
 		$volume = Split-Path $folder -Qualifier
 		if ($volumes -notcontains $volume) {
 			Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Creating shadow copy for volume $volume..."
@@ -570,26 +570,29 @@ function Execute-BackupFolders
 		}
 	}
 
-	# Р‘РµРєР°РїРёРј РґР°РЅРЅС‹Рµ РёР· С‚РµРЅРµРІРѕР№ РєРѕРїРёРё
+	# Бэкапим данные из теневой копии
 	foreach ($folder in $Folders) {
 		Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Backing up $folder to temp location $BackupTempLocation"
 		if (!(Test-Path $BackupTempLocation)) {
 			mkdir $BackupTempLocation
 		}
 		try {
-			# Р‘РµРєР°РїРёРј РїР°РїРєСѓ
-			$file = Backup-Folder -Folder (Join-Path $shadowpath (Split-Path $folder -NoQualifier)) -BackupPath $BackupTempLocation
+			# Бэкапим папку
+			$file = Backup-Folder -Folder (Join-path (Join-Path (Split-Path $folder -Qualifier) 'shadow') (Split-Path $folder -NoQualifier)) -BackupPath $BackupTempLocation
 
-			#РџРµСЂРµРјРµС‰Р°РµРј Р±РµРєР°Рї РІ С…СЂР°РЅРёР»РёС‰Рµ
+			#Перемещаем бэкап в хранилище
 			Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Moving to backup set location and hadling copies count"
-			Handle-BackupSet -SourceFile $file -TargetPath $BackupSetsLocation -RetainPolicy @{'daily' = @{'retainDays' = 7;'retainCopies' = 7}; 'monthly' = @{'retainDays' = 366; 'retainCopies' = 12}} -LogFile $LogFile -Password $Password -Compress $Compress -Encrypt $Encrypt
-			Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Backup is finished successfully."
+			#Handle-BackupSet -SourceFile $file -TargetPath $BackupSetsLocation -RetainPolicy @{'daily' = @{'retainDays' = 7;'retainCopies' = 7}; 'monthly' = @{'retainDays' = 366; 'retainCopies' = 12}} -LogFile $LogFile -Password $Password -Compress $Compress -Encrypt $Encrypt
+			
+            # Настроено под расписание: 7 копий за неделю и по 1й на первое числе месяца за последние 3 месяца
+            Handle-BackupSet -SourceFile $file -TargetPath $BackupSetsLocation -RetainPolicy @{'daily' = @{'retainDays' = 7;'retainCopies' = 7}; 'monthly' = @{'retainDays' = 93; 'retainCopies' = 3}} -LogFile $LogFile -Password $Password -Compress $Compress -Encrypt $Encrypt
+            Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Backup is finished successfully."
 		} catch {
 			Write-Host ((get-date -format 'dd.MM.yy HH:mm:ss: Backup folder $folder is failed [line: ') + $_.InvocationInfo.ScriptLineNumber + '] ' + ' - ' + $_) -ForegroundColor Red
 		}
 	}
 
-	# РЈРґР°Р»СЏРµРј С‚РµРЅРµРІС‹Рµ РєРѕРїРёРё
+	# Удаляем теневые копии
 	foreach ($volume in $shadows.keys) {
 		Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Removing shadow copy for volume $volume"
 		Remove-ShadowLink $shadows[$volume]
@@ -597,14 +600,14 @@ function Execute-BackupFolders
 	}
 }
 
-#####===== Р‘РµРєР°Рї Р±Р°Р· РґР°РЅРЅС‹С… SQL =====#####
+#####===== Бэкап баз данных SQL =====#####
 function Execute-BackupSQL
 {
 	[CmdletBinding()]
     param (
-		[Parameter(Mandatory=$true, ValueFromPipeline=$true)][string[]]$Databases, # РїРµСЂРµС‡РёСЃР»РµРЅРёРµ Р‘Р”
-		[Parameter(Mandatory=$true, ValueFromPipeline=$true)][string]$BackupTempLocation, # РІСЂРµРјРµРЅРЅРѕРµ С…СЂР°РЅРёР»РёС‰Рµ РєРѕРїРёР№
-		[Parameter(Mandatory=$true)][string]$BackupSetsLocation, # С…СЂР°РЅРёР»РёС‰Рµ Р±РµРєР°РїРѕРІ
+		[Parameter(Mandatory=$true, ValueFromPipeline=$true)][string[]]$Databases,          # перечисление БД
+		[Parameter(Mandatory=$true, ValueFromPipeline=$true)][string]$BackupTempLocation,   # временное хранилище копий
+		[Parameter(Mandatory=$true)][string]$BackupSetsLocation,                            # хранилище бэкапов
         [hashtable]$RetainPolicy = @{
 			'daily' = @{
 				'retainDays' = 14;
@@ -642,16 +645,16 @@ function Execute-BackupSQL
 	}
 }
 
-#####===== Р‘РµРєР°Рї РјРёРєСЂРѕС‚РёРєР° =====##### РґРѕРґРµР»Р°С‚СЊ
+#####===== Бэкап микротика =====##### # доделать
 function Execute-BackupMikrotik
 {
 	[CmdletBinding()]
     param (
-		[Parameter(Mandatory=$true, ValueFromPipeline=$true)][string]$MHost, # ip
-		[Parameter(Mandatory=$true, ValueFromPipeline=$true)][string]$Login, # Login РґР»СЏ РјРёРєСЂРѕС‚РёРєР°
-		[Parameter(Mandatory=$true, ValueFromPipeline=$true)][string]$Pass, # РїР°СЂРѕР»СЊ РґР»СЏ РјРёРєСЂРѕС‚РёРєР°
-		[Parameter(Mandatory=$true, ValueFromPipeline=$true)][string]$BackupTempLocation, # РІСЂРµРјРµРЅРЅРѕРµ С…СЂР°РЅРёР»РёС‰Рµ РєРѕРїРёР№
-		[Parameter(Mandatory=$true)][string]$BackupSetsLocation, # С…СЂР°РЅРёР»РёС‰Рµ Р±РµРєР°РїРѕРІ
+		[Parameter(Mandatory=$true, ValueFromPipeline=$true)][string]$MHost,                # ip
+		[Parameter(Mandatory=$true, ValueFromPipeline=$true)][string]$Login,                # Login для микротика
+		[Parameter(Mandatory=$true, ValueFromPipeline=$true)][string]$Pass,                 # Пароль для микротика
+		[Parameter(Mandatory=$true, ValueFromPipeline=$true)][string]$BackupTempLocation,   # временное хранилище копий
+        [Parameter(Mandatory=$true)][string]$BackupSetsLocation,                            # хранилище бэкапов
 		[string]$LogFile,
 		[string]$Password,
 		[boolean]$Compress,
@@ -662,14 +665,16 @@ function Execute-BackupMikrotik
 	Handle-BackupSet -SourceFile $file -TargetPath $BackupSetsLocation -RetainPolicy @{'daily' = @{'retainDays' = 7;'retainCopies' = 7}; 'monthly' = @{'retainDays' = 62; 'retainCopies' = 2}} -LogFile $LogFile -Password $Password -Compress $Compress -Encrypt $Encrypt
 }
 
-#####===== Р‘РµРєР°Рї РїР°РїРѕРє (РїСЂРёРјРµСЂ) =====#####
+Execute-BackupFolders -Folders 'D:\!Disp', 'C:\Users' -BackupTempLocation F:\TMP -BackupSetsLocation F\:!Backup -LogFile F\:!Backup\logs.log
+
+#####===== Бекaп папок (пример) =====#####
 #Execute-BackupFolders -Folders 'C:\Users\aseregin\Desktop', 'C:\Users\aseregin\Documents', 'C:\Users\aseregin\Downloads' -BackupTempLocation C:\TMP -BackupSetsLocation \\tsclient\G\Archiv -Password "P@55word"
 
-#####===== Р‘РµРєР°Рї Р±Р°Р· РґР°РЅРЅС‹С… SQL (РїСЂРёРјРµСЂ) =====#####
+#####===== Бекaп баз данных SQL (пример) =====#####
 #Execute-BackupSQL -Databases 'bd1', 'bd2' -BackupTempLocation C:\TMP -BackupSetsLocation \\tsclient\G\Archiv -Password "P@55word"
 
-#####===== Р‘РµРєР°Рї РјРёРєСЂРѕС‚РёРєР° (РїСЂРёРјРµСЂ) =====#####
+#####===== Бекaп микротика (пример) =====#####
 #Execute-BackupMikrotik -MHost '192.168.88.1' -Login 'login' -Pass 'pass' -BackupTempLocation C:\TMP -BackupSetsLocation \\tsclient\G\Archiv -Password "P@55word"
 
-#####===== Р Р°СЃС€РёС„СЂРѕРІРєР° Р·Р°С€РёС„СЂРѕРІР°РЅРЅРѕРіРѕ Р±РµРєР°РїР° (РїСЂРёРјРµСЂ) =====#####
+#####===== Расшифровка зашифрованного бекапа (пример) =====#####
 #DecryptGzip-File -InputFile \\tsclient\G\Arhiv\Desktop_daily_0706132446.zip.zip -OutputFile C:\TMP\Desktop_daily_0706132446.zip -Password "P@55word"
