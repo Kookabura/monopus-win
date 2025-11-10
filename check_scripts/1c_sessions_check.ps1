@@ -1,78 +1,80 @@
 [CmdletBinding()]
 Param(
     [Parameter()][int32]$period = 10,
-    [Parameter()][int32]$W = 95,
-    [Parameter()][int32]$C = 100,
-   # [Parameter][string]$server = "HV-01"
- #   [Parameter(Mandatory=$true)][string]$server
-    [Parameter()][string]$server='localhost',
-#    [Parameter(Mandatory=$true)][string]$base_name='bd_test'
-   [Parameter()][string]$base_name='bd_test'
+    [Parameter()][int32]$W = 0,
+    [Parameter()][int32]$C = 10,
+    [Parameter()][string]$server = 'localhost',
+    [Parameter(Mandatory=$true)][string]$base_name
 )
+
+$t = $host.ui.RawUI.ForegroundColor
 $states_text = @('ok', 'warning', 'critical', 'unknown')
+$state_colors = @('Green', 'Yellow', 'Red', 'DarkGray')
 
 $platform1c_obj = "V83.COMConnector"
 $state = 0
-$BackgroundJob = 0
+$memory_used = 0
+$log_file = 'C:\Program Files (x86)\monopus\check_scripts\1c_background_tasks.log'
 
 try
 {
     try {
+        Add-Content -Value "$(get-date) Creating com object" -Path $log_file -Encoding Unicode
         $comobj1c = New-Object -ComObject $platform1c_obj			#Создаем COM объект 1С
     } catch {
+        Add-Content -Value "$(get-date) COM issue. Starting regsvr32" -Path $log_file -Encoding Unicode
         $comDllPath = Get-ChildItem -Path "c:\Program Files" -Filter "comcntr.dll" -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notmatch 'C:\\Program Files\\Microsoft Azure Recovery Services Agent\\Scratch\\SSBV' } | Select-Object -ExpandProperty FullName -last 1
 
         $regsvr32Output = regsvr32.exe /s $comDllPath           # Если библиотека не зарегистрирована - регистрируем её
+        Add-Content -Value "$(get-date) Creating COM again" -Path $log_file -Encoding Unicode
         $comobj1c = New-Object -ComObject $platform1c_obj
     }
 
-    $result = Start-Job -ArgumentList @($server, $log_file, $platform1c_obj) -ScriptBlock {
+    $memory_used = Start-Job -ArgumentList @($server, $log_file, $platform1c_obj, $base_name) -ScriptBlock {
 
-        $unicUser = @()
-        $comobj1c = New-Object -ComObject $args[2]
+        Add-Content -Value "$(get-date) Creating com object" -Path $args[1] -Encoding Unicode
+        $comobj1c = New-Object -ComObject $args[2]			#Создаем COM объект 1С
+    
+        Add-Content -Value "$(get-date) ConnectAgent $($args[0])" -Path $args[1] -Encoding Unicode
+	    $connect1c = $comobj1c.ConnectAgent($args[0])	#Подключаемя к агенту сервера 1С
 
-	    $connect1c = $comobj1c.ConnectAgent($server)
 
-	    $cluster1c = $connect1c.GetClusters()
-	    $connect1c.Authenticate($cluster1c[0],"","")
+        Add-Content -Value "$(get-date) GetClusters" -Path $args[1] -Encoding Unicode
+	    $cluster1c = $connect1c.GetClusters()						#Получаем доступные кластеры на данном сервере
 
-	    $sessions = $connect1c.GetSessions($cluster1c[0]) #.durationCurrent #[0]
+        Add-Content -Value "$(get-date) Cluster auth" -Path $args[1] -Encoding Unicode
+	    $connect1c.Authenticate($cluster1c[0],"","")				#Подключаемся к кластеру; При условии что кластер только один, тоесть выбираем первый - [0]
+
+	    #Получаем список сессий
+	    #$sessions = $connect1c.GetSessions($cluster1c[0]) #.durationCurrent #[0]
+        Add-Content -Value "$(get-date) Get sessions" -Path $args[1] -Encoding Unicode
+        $infoBases = $connect1c.GetInfoBases($cluster1c[0])
+
+        Add-Content -Value "$(get-date) List bases" -Path $args[1] -Encoding Unicode
+        foreach ( $base in $infoBases)
+        {
+            if ( $base.Name -eq $args[3] )
+            {
+                Add-Content -Value "$(get-date) GetinfoBaseSessions" -Path $args[1] -Encoding Unicode
+                $sessions = $connect1c.GetInfoBaseSessions($cluster1c[0], $base)
+            }
+        }
+    
 
         foreach ($session in $sessions)
         {
-            if (($session.AppID -eq "BackgroundJob") -or ($session.AppID -eq "SrvrConsole"))
+            if ( $session.AppID -eq "BackgroundJob" )
             {
-                $BackgroundJob++
+                Add-Content -Value "$(get-date) Memory sum" -Path $args[1] -Encoding Unicode
+                $memory_used += $session.MemoryCurrent
             }
-            else
-            {
-                if (!($unicUser -contains $session.userName))
-                {                    
-                    $unicUser += $session.userName
-                }
-            }
+       
         }
-	
-        $all_sessions_count = [int]$sessions.Count - $BackgroundJob 
 
-        $result = New-Object PsObject
-        $result | Add-Member -Name SessionCount -Value $all_sessions_count -MemberType NoteProperty
-        $result | Add-Member -Name UniqueUser -Value $unicUser.count -MemberType NoteProperty
-        $result | Add-Member -Name BackgroundJob -Value $BackgroundJob -MemberType NoteProperty
+        Write-Output $memory_used
 
-        Write-Output $result
+    } | wait-job | receive-job
 
-    } | Wait-Job | Receive-Job
-	
-	if ($result.SessionCount -gt $W)
-	{
-		$state = 1
-		
-		if ($result.SessionCount -gt $C)
-		{
-			$state = 2
-		}
-	}
 }
 catch
 {
@@ -80,7 +82,13 @@ catch
     $state = 3
 }
 
-$output = "1c_sessions_check.$($states_text[$state])::all_sessions_count==$($result.SessionCount)__unic_user==$($result.UniqueUser)__background_job==$($BackgroundJob) | all_sessions_count=$($result.SessionCount);;;; unic_user=$($result.UniqueUser);;;; background_job=$($result.BackgroundJob);;;;"
 
+$memory_used = [math]::Round(($memory_used / 1024) / 1024, 2)
+
+
+$output = "1c_background_tasks.$($states_text[$state])::memory_used==$($memory_used) | memory_used=$($memory_used);;;;"
+
+$host.ui.RawUI.ForegroundColor = $($state_colors[$state])
 Write-Output $output
+$host.ui.RawUI.ForegroundColor = $t
 exit $state

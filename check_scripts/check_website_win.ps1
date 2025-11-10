@@ -9,8 +9,16 @@ $state = 3
 $statusCode = 0
 
 try {
+    $startTime = Get-Date
     $response = Invoke-WebRequest -Uri $url
+    $endTime = Get-Date
+    $elapsedTime = $endTime - $startTime
+    $respTime = [math]::Round($elapsedTime.TotalSeconds, 3)
+
     $statusCode = $response.StatusCode
+
+    $sizeInBytes = $response.RawContentLength
+    $sizeInMB = [math]::Round($sizeInBytes / 1MB, 4)
 
     if ($statusCode -eq 200) {
         Write-Verbose "Response is ok"
@@ -19,11 +27,14 @@ try {
         Write-Verbose "Response is not ok $statusCode"
         $state = 2
     }
+
+    $output = "check_website_win.$($states_text[$state])::time==$($respTime)__size==$($sizeInMB) | time=$($respTime);;;; size=$($sizeInMB);;;;"
 } catch {
-    Write-Verbose "Response error"
+    $state = 3
+    $output = "check_website_win.$($states_text[$state])::error==$($_) | time=0;;;; size=0;;;;"
+    Write-Verbose "Response error $_"
 }
 
-$output = "check_website.$($states_text[$state]) | status=$statusCode"
+
 Write-Output $output
 exit $state
-
