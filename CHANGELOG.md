@@ -6,6 +6,16 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+## [1.7.1]
+
+- Monitor-Host.ps1                      Reworked check logic 
+- action_scripts/Backup-Something.ps1   Improved folder backup logic
+- check_scripts/1c_config_check.ps1     Add new check
+- check_scripts/1c_sessions_check.ps1   Improved check logic
+- check_scripts/check_client_ver.ps1    Add timeout
+- check_scripts/check_website_win.ps1   Response time and page size added to output 
+- check_scripts/vendor/reference.conf   Add config
+
 ## [1.7]
 
 - check_veeam_space updated: return used space
