@@ -1,3 +1,12 @@
+$SevenZipPath = "C:\Program Files\7-Zip\7z.exe"
+if (-not (Test-Path $SevenZipPath)) {
+    # Попробуй найти 7-Zip в других путях
+    $SevenZipPath = Get-ChildItem "C:\Program Files*\7-Zip\7z.exe" | Select-Object -First 1 -ExpandProperty FullName
+    if (-not $SevenZipPath) {
+        throw "7-Zip not found! Please install 7-Zip or check the path"
+    }
+}
+
 function Remove-OldFiles {
     param (
         [string]$TargetDir,
@@ -118,13 +127,8 @@ function Handle-BackupSet {
                 $dtarget = "$dtarget.zip"
 
                 # Сжимаем файл
-                Write-Verbose "Compressing file"
-                Add-Type -assembly 'System.IO.Compression'
-                Add-Type -assembly 'System.IO.Compression.FileSystem'
-        
-                [System.IO.Compression.ZipArchive]$ZipFile = [System.IO.Compression.ZipFile]::Open($dtarget, ([System.IO.Compression.ZipArchiveMode]::Create))
-                [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($ZipFile, $tmpfile.fullname, (Split-Path $tmpfile.fullname -Leaf)) | Out-Null
-                $ZipFile.Dispose()
+                Write-Verbose "Compressing file with 7-Zip"
+                & $SevenZipPath a "$dtarget" "$($tmpfile.fullname)" -mx=5 -tzip
 
                 # Проверка, нужно ли шифровать файл
                 if (![string]::IsNullOrWhiteSpace($Encrypt)) {
@@ -451,7 +455,6 @@ function Backup-Folder {
     )
 
     Process {
-
         if (!($source = get-item $Folder -ErrorAction SilentlyContinue)) {
             throw "Source folder $Folder does not exist"
         }
@@ -470,11 +473,12 @@ function Backup-Folder {
         if (Test-Path $backupFile) {
             rm $backupFile
         }
-        
-        Add-Type -assembly 'System.IO.Compression'
-        Add-Type -assembly 'System.IO.Compression.FileSystem'
-                
-        [System.IO.Compression.ZipFile]::CreateFromDirectory($Folder, $backupFile, 'Optimal', $false) | Out-Null
+
+        & $SevenZipPath a "$backupFile" "$Folder\*" -mx=5 -tzip
+
+        if (-not (Test-Path $backupFile)) {
+            throw "Failed to create backup archive with 7-Zip"
+        }
 
         Write-Output $backupFile
     }
@@ -664,20 +668,17 @@ function Execute-BackupFolders
 			if ($robocopyProcess.ExitCode -le 7) {
 				Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Robocopy synchronization completed successfully"
 				
-				# Создаем ZIP из актуального зеркала
-				$backupFile = Join-Path $BackupTempLocation "$folderName-$currentDate.zip"
-				Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Creating ZIP archive from synchronized mirror"
+				# Создаем ZIP из актуального зеркала через 7-Zip
+                $backupFile = Join-Path $BackupSetsLocation "$folderName-$currentDate.zip"
+                Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Creating ZIP archive from synchronized mirror with 7-Zip"
 				
 				try {
-					Add-Type -Assembly 'System.IO.Compression'
-					Add-Type -Assembly 'System.IO.Compression.FileSystem'
-					
-					[System.IO.Compression.ZipFile]::CreateFromDirectory($mirrorPath, $backupFile, 'Optimal', $false)
-					
+					& $SevenZipPath a "$backupFile" "$mirrorPath\*" -mx=5 -tzip
+
 					# Перемещаем бэкап в хранилище
 					Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Moving to backup set location"
 					Handle-BackupSet -SourceFile $backupFile -TargetPath $BackupSetsLocation -RetainPolicy @{'daily' = @{'retainDays' = 7;'retainCopies' = 7}; 'monthly' = @{'retainDays' = 93; 'retainCopies' = 3}} -LogFile $LogFile -Password $Password -Compress $Compress -Encrypt $Encrypt
-					
+
 					Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Backup completed successfully."
 				} catch {
 					Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Failed to create ZIP archive: $_" -ForegroundColor Red
