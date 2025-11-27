@@ -514,6 +514,34 @@ function New-ShadowLink {
 }
 
 
+function Clear-OldRobocopyLogs {
+    param(
+        [string]$LogsPath = "F:\TMP",
+        [int]$KeepDays = 7
+    )
+    
+    try {
+        Write-Host "$(Get-Date -format 'dd.MM.yy HH:mm:ss'): Cleaning old robocopy logs..."
+        
+        $cutoffDate = (Get-Date).AddDays(-$KeepDays)
+        $oldLogs = Get-ChildItem -Path $LogsPath -Filter "robocopy_*.log" | Where-Object {
+            $_.LastWriteTime -lt $cutoffDate
+        }
+        
+        if ($oldLogs.Count -gt 0) {
+            Write-Host "Found $($oldLogs.Count) old logs to remove"
+            $oldLogs | Remove-Item -Force
+            Write-Host "Old robocopy logs cleaned successfully"
+        } else {
+            Write-Host "No old robocopy logs found"
+        }
+    }
+    catch {
+        Write-Warning "Failed to clean old robocopy logs: $_"
+    }
+}
+
+
 function Remove-ShadowLink {
     [CmdletBinding()]
     param (
@@ -586,6 +614,9 @@ function Execute-BackupFolders
 		[boolean]$Encrypt
     )
 	
+    # Очистка старых логов
+    Clear-OldRobocopyLogs -LogsPath $BackupTempLocation -KeepDays 7
+	
 	# Создаем теневые копии для дисков, на которых находятся папки
 	Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Starting folders backup job..."
 	$volumes = @()
@@ -621,16 +652,15 @@ function Execute-BackupFolders
 		if (!(Test-Path $BackupTempLocation)) {
 			mkdir $BackupTempLocation -Force | Out-Null
 		}
-		
+
 		try {
 			$volume = Split-Path $folder -Qualifier
 			$folderName = Split-Path $folder -Leaf
 			$currentDate = Get-Date -Format 'yyyyMMdd-HHmmss'
-			
+
 			# Путь для зеркальной копии Robocopy (сохраняется между запусками)
-			$mirrorFolderName = "$folderName-MIRROR"
-			$mirrorPath = Join-Path $BackupTempLocation $mirrorFolderName
-			
+			$mirrorPath = Join-Path $BackupTempLocation $folderName
+
 			# Определяем источник для копирования
 			if ($shadows.ContainsKey($volume)) {
 				# Используем теневую копию если доступна
@@ -642,10 +672,10 @@ function Execute-BackupFolders
 				Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Using original source: $folder"
 				$source = $folder
 			}
-			
+
 			# Создаем/обновляем зеркало с помощью Robocopy
 			Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Synchronizing mirror with Robocopy..."
-			
+
 			$robocopyArgs = @(
 				"`"$source`"",
 				"`"$mirrorPath`"",
@@ -660,11 +690,11 @@ function Execute-BackupFolders
 				"/V",           # подробный вывод
 				"/XD `"$RECYCLE.BIN`" `"System Volume Information`"",
 				"/XF `"pagefile.sys`" `"swapfile.sys`" `"hiberfil.sys`"",
-				"/UNILOG+:`"$BackupTempLocation\robocopy.log`""
+				"/UNILOG+:`"$BackupTempLocation\robocopy_$(Get-Date -Format 'dd.MM.yy_HH-mm-ss').log`""
 			)
-			
+
 			$robocopyProcess = Start-Process -FilePath "robocopy.exe" -ArgumentList $robocopyArgs -Wait -PassThru -NoNewWindow
-			
+
 			if ($robocopyProcess.ExitCode -le 7) {
 				Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Robocopy synchronization completed successfully"
 				
