@@ -1,3 +1,12 @@
+$SevenZipPath = "C:\Program Files\7-Zip\7z.exe"
+if (-not (Test-Path $SevenZipPath)) {
+    # Попробуй найти 7-Zip в других путях
+    $SevenZipPath = Get-ChildItem "C:\Program Files*\7-Zip\7z.exe" | Select-Object -First 1 -ExpandProperty FullName
+    if (-not $SevenZipPath) {
+        throw "7-Zip not found! Please install 7-Zip or check the path"
+    }
+}
+
 function Remove-OldFiles {
     param (
         [string]$TargetDir,
@@ -118,13 +127,8 @@ function Handle-BackupSet {
                 $dtarget = "$dtarget.zip"
 
                 # Сжимаем файл
-                Write-Verbose "Compressing file"
-                Add-Type -assembly 'System.IO.Compression'
-                Add-Type -assembly 'System.IO.Compression.FileSystem'
-        
-                [System.IO.Compression.ZipArchive]$ZipFile = [System.IO.Compression.ZipFile]::Open($dtarget, ([System.IO.Compression.ZipArchiveMode]::Create))
-                [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($ZipFile, $tmpfile.fullname, (Split-Path $tmpfile.fullname -Leaf)) | Out-Null
-                $ZipFile.Dispose()
+                Write-Verbose "Compressing file with 7-Zip"
+                & $SevenZipPath a "$dtarget" "$($tmpfile.fullname)" -mx=5 -tzip
 
                 # Проверка, нужно ли шифровать файл
                 if (![string]::IsNullOrWhiteSpace($Encrypt)) {
@@ -451,7 +455,6 @@ function Backup-Folder {
     )
 
     Process {
-
         if (!($source = get-item $Folder -ErrorAction SilentlyContinue)) {
             throw "Source folder $Folder does not exist"
         }
@@ -470,11 +473,12 @@ function Backup-Folder {
         if (Test-Path $backupFile) {
             rm $backupFile
         }
-        
-        Add-Type -assembly 'System.IO.Compression'
-        Add-Type -assembly 'System.IO.Compression.FileSystem'
-                
-        [System.IO.Compression.ZipFile]::CreateFromDirectory($Folder, $backupFile, 'Optimal', $false) | Out-Null
+
+        & $SevenZipPath a "$backupFile" "$Folder\*" -mx=5 -tzip
+
+        if (-not (Test-Path $backupFile)) {
+            throw "Failed to create backup archive with 7-Zip"
+        }
 
         Write-Output $backupFile
     }
@@ -506,6 +510,34 @@ function New-ShadowLink {
     end {
         Write-Verbose "Returning shadowcopy snapshot object"
         return $shadow;
+    }
+}
+
+
+function Clear-OldRobocopyLogs {
+    param(
+        [string]$LogsPath = "F:\TMP",
+        [int]$KeepDays = 7
+    )
+    
+    try {
+        Write-Host "$(Get-Date -format 'dd.MM.yy HH:mm:ss'): Cleaning old robocopy logs..."
+        
+        $cutoffDate = (Get-Date).AddDays(-$KeepDays)
+        $oldLogs = Get-ChildItem -Path $LogsPath -Filter "robocopy_*.log" | Where-Object {
+            $_.LastWriteTime -lt $cutoffDate
+        }
+        
+        if ($oldLogs.Count -gt 0) {
+            Write-Host "Found $($oldLogs.Count) old logs to remove"
+            $oldLogs | Remove-Item -Force
+            Write-Host "Old robocopy logs cleaned successfully"
+        } else {
+            Write-Host "No old robocopy logs found"
+        }
+    }
+    catch {
+        Write-Warning "Failed to clean old robocopy logs: $_"
     }
 }
 
@@ -582,6 +614,9 @@ function Execute-BackupFolders
 		[boolean]$Encrypt
     )
 	
+    # Очистка старых логов
+    Clear-OldRobocopyLogs -LogsPath $BackupTempLocation -KeepDays 7
+	
 	# Создаем теневые копии для дисков, на которых находятся папки
 	Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Starting folders backup job..."
 	$volumes = @()
@@ -597,7 +632,7 @@ function Execute-BackupFolders
 				$shadowpath = $(Join-Path $volume 'shadow')
 				Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Creating SymLink to shadowcopy at $shadowpath"
 				$target = "$($shadow.DeviceObject)\";
-				Invoke-Expression -Command "cmd /c mklink /d '$shadowpath' '$target'" | Out-Null
+				Invoke-Expression -Command "cmd /c mklink /d '$shadowpath' '$target'"
 
 				$shadows[$volume] = @{
 					Shadow = $shadow
@@ -624,8 +659,7 @@ function Execute-BackupFolders
 			$currentDate = Get-Date -Format 'yyyyMMdd-HHmmss'
 			
 			# Путь для зеркальной копии Robocopy (сохраняется между запусками)
-			$mirrorFolderName = "$folderName-MIRROR"
-			$mirrorPath = Join-Path $BackupTempLocation $mirrorFolderName
+			$mirrorPath = Join-Path $BackupTempLocation $folderName
 			
 			# Определяем источник для копирования
 			if ($shadows.ContainsKey($volume)) {
@@ -641,7 +675,7 @@ function Execute-BackupFolders
 			
 			# Создаем/обновляем зеркало с помощью Robocopy
 			Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Synchronizing mirror with Robocopy..."
-			
+
 			$robocopyArgs = @(
 				"`"$source`"",
 				"`"$mirrorPath`"",
@@ -655,36 +689,34 @@ function Execute-BackupFolders
 				"/NP",          # не показывать процент выполнения
 				"/V",           # подробный вывод
 				"/XD `"$RECYCLE.BIN`" `"System Volume Information`"",
-				"/XF `"pagefile.sys`" `"swapfile.sys`" `"hiberfil.sys`"",
-				"/UNILOG+:`"$BackupTempLocation\robocopy.log`""
+				"/XF `"pagefile.sys`" `"swapfile.sys`" `"hiberfil.sys`""
 			)
+
+            robocopy $source $mirrorPath /MIR /E /B /ZB /R:3 /W:5 /TBD /NP /V /XD '$RECYCLE.BIN' 'System Volume Information' 'AppData' 'Local Settings' /XF "pagefile.sys" "swapfile.sys" "hiberfil.sys" | Out-File $("$BackupTempLocation\robocopy_$(Get-Date -Format 'dd.MM.yy_HH-mm-ss').log") -Encoding unicode
 			
-			$robocopyProcess = Start-Process -FilePath "robocopy.exe" -ArgumentList $robocopyArgs -Wait -PassThru -NoNewWindow
+			#$robocopyProcess = Start-Process -FilePath "robocopy.exe" -ArgumentList $robocopyArgs -Wait -PassThru -NoNewWindow -RedirectStandardOutput $("$BackupTempLocation\robocopy_$(Get-Date -Format 'dd.MM.yy_HH-mm-ss').log")
 			
-			if ($robocopyProcess.ExitCode -le 7) {
-				Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Robocopy synchronization completed successfully"
+			Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Robocopy synchronization completed successfully"
 				
-				# Создаем ZIP из актуального зеркала
-				$backupFile = Join-Path $BackupTempLocation "$folderName-$currentDate.zip"
-				Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Creating ZIP archive from synchronized mirror"
+            # Чистим старые архивы
+            ls $BackupSetsLocation -File | rm			
+
+            # Создаем ZIP из актуального зеркала через 7-Zip
+            $backupFile = Join-Path $BackupSetsLocation "$folderName-$currentDate.zip"
+            Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Creating ZIP archive from synchronized mirror with 7-Zip"
 				
-				try {
-					Add-Type -Assembly 'System.IO.Compression'
-					Add-Type -Assembly 'System.IO.Compression.FileSystem'
-					
-					[System.IO.Compression.ZipFile]::CreateFromDirectory($mirrorPath, $backupFile, 'Optimal', $false)
-					
-					# Перемещаем бэкап в хранилище
-					Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Moving to backup set location"
-					Handle-BackupSet -SourceFile $backupFile -TargetPath $BackupSetsLocation -RetainPolicy @{'daily' = @{'retainDays' = 7;'retainCopies' = 7}; 'monthly' = @{'retainDays' = 93; 'retainCopies' = 3}} -LogFile $LogFile -Password $Password -Compress $Compress -Encrypt $Encrypt
-					
-					Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Backup completed successfully."
-				} catch {
-					Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Failed to create ZIP archive: $_" -ForegroundColor Red
-				}
-			} else {
-				Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Robocopy synchronization failed with exit code: $($robocopyProcess.ExitCode)" -ForegroundColor Red
+			try {
+				& $SevenZipPath a "$backupFile" "$mirrorPath\*" -mx=5 -tzip
+
+				# Перемещаем бэкап в хранилище
+				Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Moving to backup set location"
+				Handle-BackupSet -SourceFile $backupFile -TargetPath $BackupSetsLocation -RetainPolicy @{'daily' = @{'retainDays' = 7;'retainCopies' = 7}; 'monthly' = @{'retainDays' = 93; 'retainCopies' = 3}} -LogFile $LogFile -Password $Password -Compress $Compress -Encrypt $Encrypt
+
+				Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Backup completed successfully."
+			} catch {
+				Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Failed to create ZIP archive: $_" -ForegroundColor Red
 			}
+			
 			
 		} catch {
 			Write-Host "$(get-date -format 'dd.MM.yy HH:mm:ss'): Backup folder $folder failed [line: $($_.InvocationInfo.ScriptLineNumber)] - $_" -ForegroundColor Red
