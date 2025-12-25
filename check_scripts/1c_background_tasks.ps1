@@ -38,7 +38,6 @@ try
         Add-Content -Value "$(get-date) ConnectAgent $($args[0])" -Path $args[1] -Encoding Unicode
 	    $connect1c = $comobj1c.ConnectAgent($args[0])	#Подключаемя к агенту сервера 1С
 
-
         Add-Content -Value "$(get-date) GetClusters" -Path $args[1] -Encoding Unicode
 	    $cluster1c = $connect1c.GetClusters()						#Получаем доступные кластеры на данном сервере
 
@@ -59,13 +58,12 @@ try
                 $sessions = $connect1c.GetInfoBaseSessions($cluster1c[0], $base)
             }
         }
-    
 
         foreach ($session in $sessions)
         {
-            if ( $session.AppID -eq "BackgroundJob" )
+            if ( $session.AppID -eq "BackgroundJob"  -and $session.MemoryCurrent -gt 0)
             {
-                Add-Content -Value "$(get-date) Memory sum" -Path $args[1] -Encoding Unicode
+                Add-Content -Value "$(get-date) Memory sum $($session.MemoryCurrent)" -Path $args[1] -Encoding Unicode
                 $memory_used += $session.MemoryCurrent
             }
        
@@ -82,11 +80,9 @@ catch
     $state = 3
 }
 
+$memory_used = [math]::Round($memory_used / 1Mb, 2)
 
-$memory_used = [math]::Round(($memory_used / 1024) / 1024, 2)
-
-
-$output = "1c_background_tasks.$($states_text[$state])::memory_used==$($memory_used) | memory_used=$($memory_used);;;;"
+$output = "1c_background_tasks.$($states_text[$state])::memory_used==$memory_used | memory_used=$memory_used;;;;"
 
 $host.ui.RawUI.ForegroundColor = $($state_colors[$state])
 Write-Output $output
