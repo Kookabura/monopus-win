@@ -38,7 +38,7 @@ $headers = @{
     "Content-Type" = "application/json"
 }
 
-$url = "$H/rest/v1/Chassis/1/Thermal"
+$url = "https://$($H)/rest/v1/Chassis/1/Thermal"
 
 try {
     # Получение данных
