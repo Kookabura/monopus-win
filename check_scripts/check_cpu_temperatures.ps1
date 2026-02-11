@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 Param(
   [Parameter(Mandatory=$true)][string]$H,
   [Parameter(Mandatory=$true)][string]$login,
@@ -75,9 +75,10 @@ try {
             if ($cpu_state -gt $state) {
                 $state = $cpu_state
             }
-            
-            # Добавляем perfdata для каждого CPU
-            $perfdata += "'$cpu_name'=${temp};$W;$C;0;"
+
+            # Добавляем perfdata для каждого CPU с заменой пробелов
+            $perf_cpu_name = $cpu_name -replace ' ', '_'
+            $perfdata += "$perf_cpu_name=${temp};$W;$C;0;"
         }
         
         # Формируем текст вывода
@@ -86,17 +87,17 @@ try {
         } elseif ($problem_cpus.Count -eq 1) {
             $output_text = "$($problem_cpus[0])"
         } else {
-            $output_text = "$($problem_cpus.Count)"
-            $output_text += " - " + ($problem_cpus -join ", ")
+            $output_text = "output_count==$($problem_cpus.Count)"
+            $output_text += "__output_details==" + ($problem_cpus -join ", ")
         }
     }
 } catch {
-    $output_text = "ERROR: $($_.Exception.Message)"
+    $output_text = "output_text==ERROR: $($_.Exception.Message)"
     $state = 3
 }
 
 $perfdata_string = $perfdata -join " "
-$output = "check_cpu_temperatures.$($states_text[$state])::$output_text | $perfdata_string"
+$output = "check_cpu_temperatures.$($states_text[$state])::$($output_text) | $perfdata_string"
 
 Write-Output $output
 exit $state
