@@ -1,8 +1,8 @@
 ﻿[CmdletBinding()]
 Param(
   [Parameter(Mandatory=$true)][string]$H,
-  [Parameter(Mandatory=$true)][string]$login,
-  [Parameter(Mandatory=$true)][string]$password,
+  [Parameter()][string]$login = $env:check_server_login,
+  [Parameter()][string]$password = $env:check_server_password,
   [Parameter()][int]$W = 40,
   [Parameter()][int]$C = 60
 )
