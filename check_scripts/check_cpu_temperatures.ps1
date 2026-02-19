@@ -1,8 +1,8 @@
 ﻿[CmdletBinding()]
 Param(
   [Parameter(Mandatory=$true)][string]$H,
-  [Parameter()][string]$login = $env:check_server_login,
-  [Parameter()][string]$password = $env:check_server_password,
+  [Parameter()][string]$login = $env:monopus_server_login,
+  [Parameter()][string]$password = $env:monopus_server_password,
   [Parameter()][int]$W = 40,
   [Parameter()][int]$C = 60
 )
@@ -78,7 +78,7 @@ try {
 
             # Добавляем perfdata для каждого CPU с заменой пробелов
             $perf_cpu_name = $cpu_name -replace ' ', '_'
-            $perfdata += "$perf_cpu_name=${temp};$W;$C;0;"
+            $perfdata += "$perf_cpu_name=${temp};$W;$C;;"
         }
         
         # Формируем текст вывода
