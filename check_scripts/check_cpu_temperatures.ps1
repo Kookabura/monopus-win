@@ -78,14 +78,14 @@ try {
 
             # Добавляем perfdata для каждого CPU с заменой пробелов
             $perf_cpu_name = $cpu_name -replace ' ', '_'
-            $perfdata += "$perf_cpu_name=${temp};;;;"
+            $perfdata += "$perf_cpu_name=$($temp);;;;"
         }
         
         # Формируем текст вывода
         if ($state -eq 0) {
-            $output_text = "${max_temp}°C"
+            $output_text = "$($max_temp)°C"
         } elseif ($problem_cpus.Count -eq 1) {
-            $output_text = "$($problem_cpus[0])"
+            $output_text += ("output_count==1__output_details==$($problem_cpus[0])")
         } else {
             $output_text = "output_count==$($problem_cpus.Count)"
             $output_text += ("__output_details==" + ($problem_cpus -join ", "))
