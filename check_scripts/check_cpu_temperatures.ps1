@@ -65,10 +65,10 @@ try {
             $cpu_state = 0
             if ($temp -ge $C) {
                 $cpu_state = 2
-                $problem_cpus += "$($cpu_name): ${temp}°C (CRITICAL)"
+                $problem_cpus += "$($cpu_name): $($temp)°C (CRITICAL)"
             } elseif ($temp -ge $W) {
                 $cpu_state = 1
-                $problem_cpus += "$($cpu_name): ${temp}°C (WARNING)"
+                $problem_cpus += "$($cpu_name): $($temp)°C (WARNING)"
             }
             
             # Обновляем общий статус
@@ -78,7 +78,7 @@ try {
 
             # Добавляем perfdata для каждого CPU с заменой пробелов
             $perf_cpu_name = $cpu_name -replace ' ', '_'
-            $perfdata += "$perf_cpu_name=${temp};$W;$C;;"
+            $perfdata += "$perf_cpu_name=${temp};;;;"
         }
         
         # Формируем текст вывода
@@ -88,7 +88,7 @@ try {
             $output_text = "$($problem_cpus[0])"
         } else {
             $output_text = "output_count==$($problem_cpus.Count)"
-            $output_text += "__output_details==" + ($problem_cpus -join ", ")
+            $output_text += ("__output_details==" + ($problem_cpus -join ", "))
         }
     }
 } catch {
