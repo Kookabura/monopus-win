@@ -71,7 +71,7 @@ if ($errorOccurred) {
     $state = 0
 }
 
-$output = "check_logs_errors.$($states_text[$state])::count==$($totalCount) | count=$($totalCount);;;;"
+$output = "check_event_logs.$($states_text[$state])::count==$($totalCount) | count=$($totalCount);;;;"
 
 Write-Output $output
 exit $state
