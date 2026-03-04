@@ -38,11 +38,42 @@ $headers = @{
     "Content-Type" = "application/json"
 }
 
-$url = "https://$($H)/rest/v1/Chassis/1/Thermal"
+#$url = "https://$($H)/rest/v1/Chassis/1/Thermal"
+
+# Функция для попытки запроса с обработкой редиректа 301/308 -> redfish
+function Get-ThermalDataWithFallback {
+    param(
+        [string]$HostIP,
+        [hashtable]$Headers,
+        [string]$PrimaryPath = "/rest/v1/Chassis/1/Thermal",
+        [string]$FallbackPath = "/redfish/v1/Chassis/1/Thermal"
+    )
+    
+    # Пробуем основной (старый) URL
+    $url = "https://$HostIP$PrimaryPath"
+    try {
+        Write-Verbose "Trying primary URL: $url"
+        $data = Invoke-RestMethod -Uri $url -Headers $Headers -ErrorAction Stop
+        return $data
+    }
+    catch {
+        # Проверяем, есть ли доступ к ответу сервера
+        $response = $_.Exception.Response
+        if ($response -and ($response.StatusCode -eq 301 -or $response.StatusCode -eq 308)) {
+            Write-Verbose "Got $($response.StatusCode) redirect, trying fallback URL..."
+            $fallbackUrl = "https://$HostIP$FallbackPath"
+            $data = Invoke-RestMethod -Uri $fallbackUrl -Headers $Headers -ErrorAction Stop
+            return $data
+        }
+        # Если ошибка не связана с редиректом — пробрасываем дальше
+        throw
+    }
+}
 
 try {
     # Получение данных
-    $data = Invoke-RestMethod -Uri $url -Headers $headers -ErrorAction Stop
+    #$data = Invoke-RestMethod -Uri $url -Headers $headers -ErrorAction Stop
+    $data = Get-ThermalDataWithFallback -HostIP $H -Headers $headers
     
     # Фильтрация CPU
     $cpus = $data.Temperatures | Where-Object { $_.Name -match 'CPU' }
