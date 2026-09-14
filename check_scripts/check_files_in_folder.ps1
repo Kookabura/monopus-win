@@ -1,21 +1,42 @@
 [CmdletBinding()]
 Param(
   [Parameter(Mandatory=$true)][string]$path,
-  [Parameter(Mandatory=$false)][string]$E, # Папки-исключения (через запятую: archive,failed)
-  [Parameter()][int32]$W,
-  [Parameter()][int32]$C
+  [Parameter()][string[]]$E, # Папки-исключения (через запятую: archive,failed)
+  [Parameter()][int32]$W = 10,
+  [Parameter()][int32]$C = 20
 )
 
-$states_text = @('ok', 'warning', 'critical', 'unknown')
-$state = 0
-$total_files = 0
-$metrics = @()
+# Функция для нормализации путей: заменяет прямые слеши на обратные и убирает двойные экранирования
+function Convert-ToNormalPath {
+    param ([string]$InputPath)
+    if (-not $InputPath) { return "" }
+    # Меняем все "/" на "\"
+    $normalized = $InputPath -replace '/', '\'
+    # Схлопываем множественные "\\" в один "\"
+    $normalized = $normalized -replace '\\+', '\'
+    return $normalized
+}
+
+# Нормализуем пути сразу после получения параметров
+ $path = Convert-ToNormalPath $path
+
+ $states_text = @('ok', 'warning', 'critical', 'unknown')
+ $state = 0
+ $total_files = 0
+ $metrics = @()
 
 # Разбиваем строку исключений в массив и приводим к нижнему регистру для надежности
-$excludeFolders = @()
-if ($E) {
-    $excludeFolders = $E -split ',' | ForEach-Object { $_.Trim().ToLower() }
-}
+$excludeFolders = @(
+    foreach ($excludeItem in $E) {
+        foreach ($folderName in ($excludeItem -split ',')) {
+            $normalizedName = $folderName.Trim()
+
+            if ($normalizedName) {
+                $normalizedName.ToLowerInvariant()
+            }
+        }
+    }
+)
 
 # Проверяем, существует ли корневая папка
 if (-not (Test-Path $path)) {
@@ -24,7 +45,7 @@ if (-not (Test-Path $path)) {
 }
 
 # Ищем все подпапки
-$subfolders = Get-ChildItem -Path $path -Directory -ErrorAction SilentlyContinue
+ $subfolders = Get-ChildItem -Path $path -Directory -ErrorAction SilentlyContinue
 
 if ($subfolders.Count -eq 0) {
     # Если подпапок нет, считаем в корне
@@ -41,7 +62,7 @@ if ($subfolders.Count -eq 0) {
             # Считаем файлы
             $count = (Get-ChildItem -Path $folder.FullName -File -ErrorAction SilentlyContinue | Measure-Object).Count
             
-            # Суммируем ВСЕГДА, даже если файлов 0 (хотя для метрики 0 можно не писать)
+            # Суммируем ВСЕГДА, даже если файлов 0
             $total_files += $count
             
             # Добавляем метрику, только если файлы есть
@@ -55,7 +76,7 @@ if ($subfolders.Count -eq 0) {
 }
 
 # Добавляем тотал в начало списка метрик
-$metrics = @("total_files=$total_files") + $metrics
+ $metrics = @("total_files=$total_files") + $metrics
 
 # Логика статусов
 if ($total_files -ge $C) {
@@ -67,8 +88,8 @@ if ($total_files -ge $C) {
 }
 
 # Формат вывода: Имя.статус | метрика1=значение1 метрика2=значение2
-$perfdata = $metrics -join ' '
-$output = "check_files_in_folder.$($states_text[$state]) | $perfdata"
+ $perfdata = $metrics -join ' '
+ $output = "check_files_in_folder.$($states_text[$state]) | $perfdata"
 
 Write-Output $output
 exit $state
