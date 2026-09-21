@@ -75,7 +75,8 @@ Process {
     if ($latest_version -gt [System.Version]$config.version) {
         if ($v = Update-MonOpusClient -Config $Config -NewVersion $latest_version) {
             
-            cmd /c "SCHTASKS /End /TN $($config.task_name) && SCHTASKS /Run /TN $($config.task_name)"
+            # The service supervisor restarts Monitor-Host.ps1 after this process exits.
+            Stop-Process -Id $PID -Force
         } else {
             $state = 1
         }

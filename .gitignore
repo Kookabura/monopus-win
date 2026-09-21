@@ -1,3 +1,5 @@
 check_scripts/tmp/
 main.cfg
 Monitor-Host-Service.exe
+install.log
+monitor-host-service.log

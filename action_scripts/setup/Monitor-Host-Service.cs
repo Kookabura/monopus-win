@@ -7,6 +7,8 @@ using System.Threading;
 internal sealed class MonitorHostService : ServiceBase
 {
     private readonly ManualResetEvent stopping = new ManualResetEvent(false);
+    private static readonly object logLock = new object();
+    private static string logPath;
     private Thread worker;
 
     public MonitorHostService()
@@ -31,7 +33,9 @@ internal sealed class MonitorHostService : ServiceBase
 
     private void RunMonitor()
     {
-        string directory = AppDomain.CurrentDomain.BaseDirectory;
+        string directory = Path.GetFullPath(Path.Combine(
+            AppDomain.CurrentDomain.BaseDirectory, "..", ".."));
+        logPath = Path.Combine(directory, "monitor-host-service.log");
         string script = Path.Combine(directory, "Monitor-Host.ps1");
         string powershell = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.System),
@@ -49,12 +53,23 @@ internal sealed class MonitorHostService : ServiceBase
                 child.StartInfo.WorkingDirectory = directory;
                 child.StartInfo.UseShellExecute = false;
                 child.StartInfo.CreateNoWindow = true;
+                child.StartInfo.RedirectStandardError = true;
+                child.ErrorDataReceived += delegate(object sender, DataReceivedEventArgs data)
+                {
+                    if (data.Data != null)
+                        Log("PowerShell error: " + data.Data);
+                };
                 child.Start();
+                child.BeginErrorReadLine();
+                Log("Started Monitor-Host.ps1, PID " + child.Id);
 
                 while (!stopping.WaitOne(1000) && !child.HasExited) { }
+                if (child.HasExited && !stopping.WaitOne(0))
+                    Log("Monitor-Host.ps1 exited with code " + child.ExitCode + "; restarting in 5 seconds.");
             }
             catch (Exception error)
             {
+                Log("Could not run Monitor-Host.ps1: " + error.Message);
                 try
                 {
                     EventLog.WriteEntry("Application", "monOpus monitor could not start: " + error,
@@ -80,6 +95,20 @@ internal sealed class MonitorHostService : ServiceBase
             // A crashed or normally exited monitor is started again after a short delay.
             stopping.WaitOne(5000);
         }
+        Log("Service stopped.");
+    }
+
+    private static void Log(string message)
+    {
+        try
+        {
+            lock (logLock)
+            {
+                File.AppendAllText(logPath,
+                    DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " " + message + Environment.NewLine);
+            }
+        }
+        catch { }
     }
 
     public static void Main()

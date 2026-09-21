@@ -13,6 +13,17 @@ function Monitor-Host {
 
     Begin {
         # Host monitoring and sending data to monopus.io
+        Function Report-ApiIssue {
+            param([string]$Message)
+            $now = Get-Date
+            if ($script:lastApiIssueMessage -ne $Message -or
+                $null -eq $script:lastApiIssueAt -or
+                ($now - $script:lastApiIssueAt).TotalSeconds -ge 60) {
+                $script:lastApiIssueMessage = $Message
+                $script:lastApiIssueAt = $now
+                Write-Error $Message
+            }
+        }
         Function Get-Services {
             [CmdletBinding()]
             Param(
@@ -22,23 +33,47 @@ function Monitor-Host {
             process {
                 try
                 {
-                    $settings_obj = (Invoke-WebRequest $config.uri -Method Post -UseBasicParsing -Body @{api_key=$($config.api_key);id=$($config.id);mon_action='check/status';class="host"} -TimeoutSec 60).content | ConvertFrom-Json
+                    $response = Invoke-WebRequest $Config.uri -Method Post -UseBasicParsing -Body @{api_key=$Config.api_key;id=$Config.id;mon_action='check/status';class="host"} -TimeoutSec 60
+                    $settings_obj = $response.Content | ConvertFrom-Json
+                    if (!$settings_obj) {
+                        Report-ApiIssue "API check/status returned an empty response for ID $($Config.id)."
+                        return $null
+                    }
+                    $success = if ($null -ne $settings_obj.success) {[string]$settings_obj.success} else {'absent'}
+                    if ($settings_obj.success -eq $false) {
+                        Report-ApiIssue "API check/status returned success=false for ID $($Config.id)."
+                        return $null
+                    }
+                    $raw_services = $settings_obj.data.services
+                    if ($null -eq $raw_services) {
+                        $fields = ($settings_obj.PSObject.Properties | ForEach-Object { $_.Name }) -join ','
+                        $dataFields = ($settings_obj.data.PSObject.Properties | ForEach-Object { $_.Name }) -join ','
+                        Report-ApiIssue "API check/status has no data.services for ID $($Config.id); success=$success; response fields=$fields; data fields=$dataFields."
+                        return $null
+                    }
+                    if ($raw_services -isnot [pscustomobject]) {
+                        Report-ApiIssue "API check/status returned services as $($raw_services.GetType().Name), expected an object."
+                        return $null
+                    }
                     $services = @{}
-                    if ($settings_obj -and $settings_obj.data.services) {
-                        ($settings_obj.data.services).psobject.properties  | % {$services[$_.Name] = $_.Value}
+                    foreach ($property in $raw_services.PSObject.Properties) {
+                        $services[$property.Name] = $property.Value
+                    }
+                    if ($services.Count -eq 0) {
+                        Report-ApiIssue "API check/status returned zero checks for ID $($Config.id); success=$success."
+                        return $null
                     }
                     return $services
                 }
                 catch
                 {
-                    Write-Verbose "$(get-date) $_"
+                    Report-ApiIssue ("API check/status request failed: " + $_.Exception.Message)
                     sleep -Seconds $retry_interval
                 }
                 
             }
         }
 
-        Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
         [Net.ServicePointManager]::SecurityProtocol = "tls12, tls11, tls"
 
     }
@@ -75,8 +110,9 @@ function Monitor-Host {
 
             # TO DO: Add check for several time before stopping because checks might be created later
             while (!$work) {
-                Write-Verbose "$(get-date) Getting services for config: $($config | ConvertTo-Json -Compress)"
-                if ($services = Get-Services -Config $config) {
+                Write-Verbose "$(get-date) Getting services for ID $($config.id)"
+                $services = Get-Services -Config $config
+                if ($services -and $services.Count -gt 0) {
                     $work = $true
                     break;
                 } else {
@@ -190,7 +226,7 @@ function Monitor-Host {
                             if ($services[$key].state -ne $lastexitcode -or (($updatedon+$services[$key].interval*60) -lt $timestamp)) {
                                 Write-Verbose "$(get-date) Sending result to monOpus. The result is $result"
                                 $request_body = @{api_key=$($config.api_key);id=$services[$key].id;mon_action='check/handle_result';result=$result;state=$lastexitcode}
-                                Write-Verbose "$(get-date) Request body is $($request_body | ConvertTo-Json)"
+                                Write-Verbose "$(get-date) Posting result for check $key"
                                 $r = Invoke-WebRequest $config.uri -Method Post -UseBasicParsing -Body $request_body -TimeoutSec 60
                                 $response = $r.content | ConvertFrom-Json
                                 Write-Verbose "$(get-date) $response"
