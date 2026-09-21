@@ -1,13 +1,13 @@
 # monOpus Windows Monitoring Client
 monOpus.io Windows monitoring client written on Powershell.
-Monitoring-Host.ps1 assumed to be run as scheduled job on computer boot. You need to obtain API key and host_id from monopus.io before run.
-Check scripts might be used separately from Monitoring-Host.ps1.
+Monitor-Host.ps1 is run by a Windows service that starts at boot and restarts the monitor if it exits.
+Check scripts might be used separately from Monitor-Host.ps1.
 
 ## Installation steps
-1. Rename main.cfg.sample to main.cfg.
-2. Put your API key to main.cfg.
-3. Import scheduled task from scheduler_task.xml template. While importing set up the name of the task the same as task_name parameter in main.cfg.
-4. Set up admin account and run with elevated command prompt parameter for imported scheduled task.
-5. Run the task.
+1. Clone this repository to `C:\Program Files (x86)\MonOpus`.
+2. Open Windows PowerShell as Administrator and run `./Install-Monitor-Host.ps1` from that directory. Enter the client ID and API key when prompted. The API key prompt hides your input.
+3. For unattended installation, pass both values: `./Install-Monitor-Host.ps1 -ClientId '123' -ApiKey 'your_api_key'`.
 
-You should get new server on monOpus.io panel with common checks.
+The installer creates `main.cfg`, compiles the service host, registers `MonOpusMonitorHost` as a LocalSystem service with automatic startup, configures recovery, and starts it. If `main.cfg` already exists, its other settings are preserved. The generated configuration and executable are ignored by Git.
+
+The configured client should then report its checks to monOpus.io.
