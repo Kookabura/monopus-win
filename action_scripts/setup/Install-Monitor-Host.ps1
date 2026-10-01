@@ -1,7 +1,6 @@
 #requires -Version 3.0
 
 param(
-    [string]$ClientId,
     [string]$ApiKey
 )
 
@@ -50,9 +49,6 @@ try {
     Write-InstallLog "Monitor script: $monitorPath"
     Write-InstallLog "Service source: $sourcePath"
 
-    if ([string]::IsNullOrWhiteSpace($ClientId)) {
-        $ClientId = Read-Host 'Client ID'
-    }
     if ([string]::IsNullOrWhiteSpace($ApiKey)) {
         $secureKey = Read-Host 'API key' -AsSecureString
         $keyPointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureKey)
@@ -63,13 +59,13 @@ try {
             [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($keyPointer)
         }
     }
-    if ([string]::IsNullOrWhiteSpace($ClientId) -or [string]::IsNullOrWhiteSpace($ApiKey)) {
-        throw 'Client ID and API key must both be non-empty.'
+    if ([string]::IsNullOrWhiteSpace($ApiKey)) {
+        throw 'API key must be non-empty.'
     }
     if ($ApiKey -eq $serviceName) {
         throw 'The API key is the service name. Enter the actual API key from monOpus.'
     }
-    Write-InstallLog "Client ID: $ClientId; API key: supplied (value is not logged)."
+    Write-InstallLog 'API key supplied (value is not logged).'
 
     $config = @{}
     $legacyTaskName = 'Monitoring'
@@ -97,47 +93,54 @@ try {
     if (-not $config.ContainsKey('version')) { $config['version'] = '1.7' }
     $config['installation_path'] = $installRoot.TrimEnd('\') + '\'
     $config['scripts_path'] = (Join-Path $installRoot 'check_scripts') + '\'
-    $config['id'] = $ClientId
     $config['api_key'] = $ApiKey
     [void]$config.Remove('task_name')
-    $configJson = $config | ConvertTo-Json -Depth 8
     Write-InstallLog 'Configuration prepared; obsolete task_name removed.'
 
-    Write-InstallLog "Checking API response from $($config['uri'])."
-    try {
-        $apiResponse = Invoke-WebRequest -Uri $config['uri'] -Method Post -UseBasicParsing `
-            -Body @{ api_key = $ApiKey; id = $ClientId; mon_action = 'check/status'; class = 'host' } `
-            -TimeoutSec 20
-        $apiResult = $apiResponse.Content | ConvertFrom-Json
-        $apiSuccess = if ($null -ne $apiResult.success) { [string]$apiResult.success } else { 'absent' }
-        $apiServices = $apiResult.data.services
-        $apiServicesType = if ($null -eq $apiServices) { 'absent' } else { $apiServices.GetType().Name }
-        $apiServiceCount = 0
-        if ($apiServices -is [pscustomobject]) {
-            $apiServiceCount = @($apiServices.PSObject.Properties).Count
+    $pointId = [string]$config['id']
+    if ([string]::IsNullOrWhiteSpace($pointId)) {
+        [void]$config.Remove('id')
+        Write-InstallLog 'Monitoring point ID is not set. The service will register this host and save the ID returned by the API on first start.'
+    }
+    else {
+        Write-InstallLog "Existing monitoring point ID retained: $pointId"
+        Write-InstallLog "Checking API response from $($config['uri'])."
+        try {
+            $apiResponse = Invoke-WebRequest -Uri $config['uri'] -Method Post -UseBasicParsing `
+                -Body @{ api_key = $ApiKey; id = $pointId; mon_action = 'check/status'; class = 'host' } `
+                -TimeoutSec 20
+            $apiResult = $apiResponse.Content | ConvertFrom-Json
+            $apiSuccess = if ($null -ne $apiResult.success) { [string]$apiResult.success } else { 'absent' }
+            $apiServices = $apiResult.data.services
+            $apiServicesType = if ($null -eq $apiServices) { 'absent' } else { $apiServices.GetType().Name }
+            $apiServiceCount = 0
+            if ($apiServices -is [pscustomobject]) {
+                $apiServiceCount = @($apiServices.PSObject.Properties).Count
+            }
+            elseif ($apiServices -is [array]) {
+                $apiServiceCount = $apiServices.Count
+            }
+            $responseFields = ($apiResult.PSObject.Properties | ForEach-Object { $_.Name }) -join ','
+            $dataFields = ($apiResult.data.PSObject.Properties | ForEach-Object { $_.Name }) -join ','
+            Write-InstallLog "API HTTP $($apiResponse.StatusCode); JSON characters: $($apiResponse.Content.Length); success: $apiSuccess; services type: $apiServicesType; checks: $apiServiceCount; response fields: $responseFields; data fields: $dataFields."
+            if ($apiResult.success -eq $false) {
+                Write-InstallLog 'WARNING: The API returned success=false. Check the monitoring point ID and API key.'
+            }
+            elseif ($apiServices -isnot [pscustomobject]) {
+                Write-InstallLog 'WARNING: The API did not return checks in the object format required by Monitor-Host.ps1.'
+            }
+            elseif ($apiServiceCount -eq 0) {
+                Write-InstallLog 'WARNING: The API responded but returned no monitoring checks.'
+            }
+            else {
+                Write-InstallLog 'API response contains monitoring checks.'
+            }
         }
-        elseif ($apiServices -is [array]) {
-            $apiServiceCount = $apiServices.Count
-        }
-        $responseFields = ($apiResult.PSObject.Properties | ForEach-Object { $_.Name }) -join ','
-        $dataFields = ($apiResult.data.PSObject.Properties | ForEach-Object { $_.Name }) -join ','
-        Write-InstallLog "API HTTP $($apiResponse.StatusCode); JSON characters: $($apiResponse.Content.Length); success: $apiSuccess; services type: $apiServicesType; checks: $apiServiceCount; response fields: $responseFields; data fields: $dataFields."
-        if ($apiResult.success -eq $false) {
-            Write-InstallLog 'WARNING: The API returned success=false. Check the client ID and API key.'
-        }
-        elseif ($apiServices -isnot [pscustomobject]) {
-            Write-InstallLog 'WARNING: The API did not return checks in the object format required by Monitor-Host.ps1.'
-        }
-        elseif ($apiServiceCount -eq 0) {
-            Write-InstallLog 'WARNING: The API responded but returned no monitoring checks.'
-        }
-        else {
-            Write-InstallLog 'API response contains monitoring checks.'
+        catch {
+            Write-InstallLog "WARNING: API check failed: $($_.Exception.Message)"
         }
     }
-    catch {
-        Write-InstallLog "WARNING: API check failed: $($_.Exception.Message)"
-    }
+    $configJson = $config | ConvertTo-Json -Depth 8
 
     $buildPath = Join-Path $env:TEMP ('MonOpusMonitorHost-{0}.exe' -f [guid]::NewGuid().ToString('N'))
     Write-InstallLog 'Compiling the Windows service executable.'
@@ -161,7 +164,7 @@ try {
     Copy-Item -LiteralPath $buildPath -Destination $servicePath -Force
     Write-InstallLog "Service executable: $servicePath"
     $configJson | Set-Content -LiteralPath $configPath -Encoding UTF8
-    Write-InstallLog "Configuration saved: $configPath (client ID: $ClientId; API key hidden)."
+    Write-InstallLog "Configuration saved: $configPath (API key hidden)."
 
     $quotedServicePath = '"{0}"' -f $servicePath
     if (-not $service) {
