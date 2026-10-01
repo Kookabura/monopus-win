@@ -24,6 +24,7 @@ function Convert-ToNormalPath {
  $state = 0
  $total_files = 0
  $metrics = @()
+ $problem_folders = @()
 
 # Разбиваем строку исключений в массив и приводим к нижнему регистру для надежности
 $excludeFolders = @(
@@ -51,6 +52,10 @@ if ($subfolders.Count -eq 0) {
     # Если подпапок нет, считаем в корне
     $count = (Get-ChildItem -Path $path -File -ErrorAction SilentlyContinue | Measure-Object).Count
     $total_files = $count
+
+    if ($count -gt 0) {
+        $problem_folders += Split-Path -Path $path -Leaf
+    }
 } else {
     # Проходим по каждой папке
     foreach ($folder in $subfolders) {
@@ -67,8 +72,10 @@ if ($subfolders.Count -eq 0) {
             
             # Добавляем метрику, только если файлы есть
             if ($count -gt 0) {
+                $problem_folders += $folder.Name
+
                 # Очищаем имя от пробелов и спецсимволов для InfluxDB
-                $safe_name = "folder_" + ($folder.Name -replace '[\s\.\-]','_' -replace '[^a-zA-Z0-9_а-яА-Я]','')
+                $safe_name = "folder_" + ($folder.Name -replace '[\s\.\-]','_' -replace '[^\p{L}0-9_]','')
                 $metrics += "$safe_name=$count"
             }
         }
@@ -89,7 +96,7 @@ if ($total_files -ge $C) {
 
 # Формат вывода: Имя.статус | метрика1=значение1 метрика2=значение2
  $perfdata = $metrics -join ' '
- $output = "check_files_in_folder.$($states_text[$state]) | $perfdata"
+ $output = "check_files_in_folder.$($states_text[$state])::problem_folders==$($problem_folders -join ', ') | $perfdata"
 
 Write-Output $output
 exit $state
