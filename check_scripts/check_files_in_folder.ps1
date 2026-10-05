@@ -3,7 +3,8 @@ Param(
   [Parameter(Mandatory=$true)][string]$path,
   [Parameter()][string[]]$E, # Папки-исключения (через запятую: archive,failed)
   [Parameter()][int32]$W = 10,
-  [Parameter()][int32]$C = 20
+  [Parameter()][int32]$C = 20,
+  [Parameter()][int32]$AgeMinutes = 15
 )
 
 # Функция для нормализации путей: заменяет прямые слеши на обратные и убирает двойные экранирования
@@ -25,6 +26,7 @@ function Convert-ToNormalPath {
  $total_files = 0
  $metrics = @()
  $problem_folders = @()
+ $cutoffTime = (Get-Date).AddMinutes(-$AgeMinutes)
 
 # Разбиваем строку исключений в массив и приводим к нижнему регистру для надежности
 $excludeFolders = @(
@@ -49,8 +51,10 @@ if (-not (Test-Path $path)) {
  $subfolders = Get-ChildItem -Path $path -Directory -ErrorAction SilentlyContinue
 
 if ($subfolders.Count -eq 0) {
-    # Если подпапок нет, считаем в корне
-    $count = (Get-ChildItem -Path $path -File -ErrorAction SilentlyContinue | Measure-Object).Count
+    # Если подпапок нет, считаем в корне только файлы старше заданного возраста
+    $count = (Get-ChildItem -Path $path -File -ErrorAction SilentlyContinue |
+        Where-Object { $_.LastWriteTime -lt $cutoffTime } |
+        Measure-Object).Count
     $total_files = $count
 
     if ($count -gt 0) {
@@ -64,8 +68,10 @@ if ($subfolders.Count -eq 0) {
         # Проверяем, есть ли папка в списке исключений
         if ($excludeFolders -notcontains $folderNameLower) {
             
-            # Считаем файлы
-            $count = (Get-ChildItem -Path $folder.FullName -File -ErrorAction SilentlyContinue | Measure-Object).Count
+            # Считаем только файлы старше заданного возраста
+            $count = (Get-ChildItem -Path $folder.FullName -File -ErrorAction SilentlyContinue |
+                Where-Object { $_.LastWriteTime -lt $cutoffTime } |
+                Measure-Object).Count
             
             # Суммируем ВСЕГДА, даже если файлов 0
             $total_files += $count
